@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { Header } from "./components/Header";
 import { PrUrlForm } from "./components/PrUrlForm";
-import { LoadingState } from "./components/LoadingState";
+import { AnalysisProgress } from "./components/AnalysisProgress";
 import { ErrorAlert } from "./components/ErrorAlert";
 import { AnalysisResults } from "./components/AnalysisResults";
-import { analyzePullRequest, ApiRequestError } from "./services/api";
+import { analyzePullRequest, ApiRequestError, parsePrDisplayInfo } from "./services/api";
 import type { PrAnalysisResponse } from "./services/api";
 import "./App.css";
+
+const STAGE_INTERVAL_MS = 4500;
+const MAX_STAGE_INDEX = 5;
 
 function App() {
   const [prUrl, setPrUrl] = useState("");
@@ -15,6 +18,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<PrAnalysisResponse | null>(null);
 
+  const displayInfo = parsePrDisplayInfo(prUrl);
+
   useEffect(() => {
     if (!loading) {
       setLoadingStage(0);
@@ -22,8 +27,8 @@ function App() {
     }
 
     const interval = window.setInterval(() => {
-      setLoadingStage((current) => Math.min(current + 1, 3));
-    }, 3500);
+      setLoadingStage((current) => Math.min(current + 1, MAX_STAGE_INDEX));
+    }, STAGE_INTERVAL_MS);
 
     return () => window.clearInterval(interval);
   }, [loading]);
@@ -44,6 +49,7 @@ function App() {
 
     try {
       const data = await analyzePullRequest(trimmed);
+      setLoadingStage(MAX_STAGE_INDEX);
       setResult(data);
     } catch (err) {
       if (err instanceof ApiRequestError) {
@@ -72,7 +78,13 @@ function App() {
         />
 
         {error && <ErrorAlert message={error} />}
-        {loading && <LoadingState stageIndex={loadingStage} />}
+        {loading && (
+          <AnalysisProgress
+            stageIndex={loadingStage}
+            repository={displayInfo.repository}
+            pullNumber={displayInfo.pullNumber}
+          />
+        )}
         {result && !loading && <AnalysisResults data={result} />}
       </div>
     </div>

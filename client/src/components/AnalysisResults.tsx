@@ -46,6 +46,17 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
 
   return (
     <div className="mt-10 w-full max-w-3xl mx-auto space-y-6">
+      {riskReport.warnings.length > 0 && (
+        <section className="rounded-xl border border-amber-900/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
+          <p className="font-medium mb-1">Partial analysis</p>
+          <ul className="list-disc list-inside space-y-1 text-amber-100/90">
+            {riskReport.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
         <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
           Pull Request

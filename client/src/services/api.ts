@@ -18,6 +18,7 @@ export interface PRRiskReport {
   testingRisk: number;
   findings: RiskFinding[];
   recommendations: string[];
+  warnings: string[];
 }
 
 export interface AnalysisSummary {
@@ -85,9 +86,23 @@ export async function analyzePullRequest(prUrl: string): Promise<PrAnalysisRespo
     const message =
       "error" in data && typeof data.error === "string"
         ? data.error
-        : "Something went wrong while analyzing the pull request.";
+        : response.status === 502 || response.status === 504
+          ? "Analysis couldn't be completed because the AI provider timed out. Please try again."
+          : "Something went wrong while analyzing the pull request.";
     throw new ApiRequestError(message, response.status);
   }
 
   return data as PrAnalysisResponse;
+}
+
+export function parsePrDisplayInfo(prUrl: string): { repository: string; pullNumber: string; title?: string } {
+  const match = prUrl.trim().match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/i);
+  if (!match) {
+    return { repository: "GitHub PR", pullNumber: "" };
+  }
+
+  return {
+    repository: match[1] ?? "GitHub PR",
+    pullNumber: match[2] ?? "",
+  };
 }
