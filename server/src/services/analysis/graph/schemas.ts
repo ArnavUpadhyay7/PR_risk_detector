@@ -5,11 +5,11 @@ export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
 export const riskFindingSchema = z.object({
   severity: riskLevelSchema,
-  title: z.string().min(1),
-  description: z.string().min(1),
-  file: z.string().optional(),
+  title: z.string().min(1).max(120),
+  description: z.string().min(1).max(200),
+  file: z.string().max(200).optional(),
   line: z.number().int().positive().optional(),
-  recommendation: z.string().min(1),
+  recommendation: z.string().min(1).max(200),
 });
 
 export type RiskFinding = z.infer<typeof riskFindingSchema>;
@@ -25,17 +25,23 @@ export const changeClassificationSchema = z.object({
 export type ChangeClassification = z.infer<typeof changeClassificationSchema>;
 
 export const findingsOutputSchema = z.object({
-  findings: z.array(riskFindingSchema),
+  findings: z.array(riskFindingSchema).max(2),
+});
+
+export const combinedFindingsOutputSchema = z.object({
+  bugFindings: z.array(riskFindingSchema).max(2),
+  securityFindings: z.array(riskFindingSchema).max(2),
+  testingFindings: z.array(riskFindingSchema).max(2),
 });
 
 export const riskJudgeOutputSchema = z.object({
   overallRisk: riskLevelSchema,
   riskScore: z.number().min(0).max(100),
-  summary: z.string().min(1),
+  summary: z.string().min(1).max(300),
   bugRisk: z.number().min(0).max(100),
   securityRisk: z.number().min(0).max(100),
   testingRisk: z.number().min(0).max(100),
-  recommendations: z.array(z.string()),
+  recommendations: z.array(z.string().max(200)).max(5),
 });
 
 export type RiskJudgeOutput = z.infer<typeof riskJudgeOutputSchema>;
@@ -49,4 +55,5 @@ export interface PRRiskReport {
   testingRisk: number;
   findings: RiskFinding[];
   recommendations: string[];
+  warnings: string[];
 }

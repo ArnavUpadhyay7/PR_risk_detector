@@ -28,7 +28,11 @@ export async function analyzePr(
       );
     }
 
+    const githubStarted = performance.now();
     const pullRequest = await githubService.getPullRequest(parsed);
+    console.log(`[PR] GitHub fetch: ${Math.round(performance.now() - githubStarted)}ms`);
+
+    const analysisStarted = performance.now();
     const analysis = await analysisService.analyzePR({
       prUrl: prUrl.trim(),
       pullRequest,
@@ -36,6 +40,7 @@ export async function analyzePr(
       pullNumber: parsed.pullNumber,
       owner: parsed.owner,
     });
+    console.log(`[PR] analysis total: ${Math.round(performance.now() - analysisStarted)}ms`);
 
     const response: PrAnalysisResponse = {
       pullRequest: {

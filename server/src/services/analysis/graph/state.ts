@@ -22,6 +22,18 @@ export const PRRiskStateAnnotation = Annotation.Root({
   deterministicSummary: Annotation<AnalysisSummary>,
   changeAreas: Annotation<string[]>,
   classification: Annotation<ChangeClassification | undefined>,
+  agentsPending: Annotation<number>({
+    reducer: (_current, update) => update,
+    default: () => 0,
+  }),
+  agentsDone: Annotation<number>({
+    reducer: (current, update) => current + update,
+    default: () => 0,
+  }),
+  agentWarnings: Annotation<string[]>({
+    reducer: (current, update) => [...current, ...update],
+    default: () => [],
+  }),
   bugFindings: Annotation<RiskFinding[]>({
     reducer: (_current, update) => update,
     default: () => [],
@@ -38,3 +50,7 @@ export const PRRiskStateAnnotation = Annotation.Root({
 });
 
 export type PRRiskState = typeof PRRiskStateAnnotation.State;
+
+export function useCombinedAnalysisMode(): boolean {
+  return process.env.RISK_ANALYSIS_MODE !== "parallel";
+}

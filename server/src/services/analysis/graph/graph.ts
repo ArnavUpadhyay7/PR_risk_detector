@@ -1,44 +1,43 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { PRRiskStateAnnotation, type PRRiskState } from "./state.js";
+import { PRRiskStateAnnotation, type PRRiskState, useCombinedAnalysisMode } from "./state.js";
 import { prAnalyzerNode } from "./nodes/pr-analyzer.node.js";
-import { classifierNode } from "./nodes/classifier.node.js";
+import { deterministicClassifierNode } from "./nodes/deterministic-classifier.node.js";
 import { bugRiskNode } from "./nodes/bug-risk.node.js";
 import { securityRiskNode } from "./nodes/security-risk.node.js";
 import { testingRiskNode } from "./nodes/testing-risk.node.js";
+import { combinedRiskNode } from "./nodes/combined-risk.node.js";
 import { riskJudgeNode } from "./nodes/risk-judge.node.js";
-import {
-  routeAfterBug,
-  routeAfterClassifier,
-  routeAfterSecurity,
-  routeAfterSecurityGate,
-  routeAfterTesting,
-  routeAfterTestingGate,
-  securityGateNode,
-  testingGateNode,
-} from "./routing.js";
+import { trivialReportNode } from "./nodes/trivial-report.node.js";
+import { checkJoinNode } from "./nodes/check-join.node.js";
+import { routeAfterClassifier } from "./routing.js";
 import { AppError } from "../../../utils/AppError.js";
+import { endTimer, startTimer } from "./utils/timing.js";
 
 function buildGraph() {
   const graph = new StateGraph(PRRiskStateAnnotation)
     .addNode("prAnalyzer", prAnalyzerNode)
-    .addNode("classifier", classifierNode)
+    .addNode("classifier", deterministicClassifierNode)
     .addNode("bugRisk", bugRiskNode)
-    .addNode("securityGate", securityGateNode)
     .addNode("securityRisk", securityRiskNode)
-    .addNode("testingGate", testingGateNode)
     .addNode("testingRisk", testingRiskNode)
+    .addNode("combinedRisk", combinedRiskNode)
+    .addNode("checkJoin", checkJoinNode)
     .addNode("riskJudge", riskJudgeNode)
+    .addNode("trivialReport", trivialReportNode)
     .addEdge(START, "prAnalyzer")
     .addEdge("prAnalyzer", "classifier")
-    .addConditionalEdges("classifier", routeAfterClassifier, ["bugRisk", "securityGate"])
-    .addConditionalEdges("bugRisk", routeAfterBug, ["securityGate"])
-    .addConditionalEdges("securityGate", routeAfterSecurityGate, [
+    .addConditionalEdges("classifier", routeAfterClassifier, [
+      "trivialReport",
+      "combinedRisk",
+      "bugRisk",
       "securityRisk",
-      "testingGate",
+      "testingRisk",
     ])
-    .addConditionalEdges("securityRisk", routeAfterSecurity, ["testingGate"])
-    .addConditionalEdges("testingGate", routeAfterTestingGate, ["testingRisk", "riskJudge"])
-    .addConditionalEdges("testingRisk", routeAfterTesting, ["riskJudge"])
+    .addEdge("combinedRisk", "riskJudge")
+    .addEdge("bugRisk", "checkJoin")
+    .addEdge("securityRisk", "checkJoin")
+    .addEdge("testingRisk", "checkJoin")
+    .addEdge("trivialReport", END)
     .addEdge("riskJudge", END);
 
   return graph.compile();
@@ -56,6 +55,10 @@ function getGraph() {
 export async function runRiskAnalysisWorkflow(
   initialState: PRRiskState,
 ): Promise<PRRiskState> {
+  const mode = useCombinedAnalysisMode() ? "combined" : "parallel";
+  startTimer("total workflow");
+  console.log(`[Graph] mode: ${mode}`);
+
   try {
     const result = await getGraph().invoke(initialState);
 
@@ -63,8 +66,10 @@ export async function runRiskAnalysisWorkflow(
       throw new AppError("AI workflow did not produce a risk report.", 502);
     }
 
+    endTimer("total workflow");
     return result;
   } catch (error) {
+    endTimer("total workflow");
     if (error instanceof AppError) {
       throw error;
     }

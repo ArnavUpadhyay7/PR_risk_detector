@@ -1,24 +1,25 @@
 import type { PRRiskState } from "../state.js";
-import { invokeStructured } from "../../../ai/llm.service.js";
+import { invokeStructuredSafe } from "../../../ai/llm.service.js";
 import {
   riskJudgeOutputSchema,
   type PRRiskReport,
   type RiskFinding,
 } from "../schemas.js";
+import { buildJudgeContext } from "../utils/context-builders.js";
+import { endTimer, startTimer } from "../utils/timing.js";
 
-const SYSTEM_PROMPT = `You are the final merge-risk judge for a pull request.
+const SYSTEM_PROMPT = `You are the final merge-risk judge.
 
-Synthesize specialist findings into a final merge-risk report.
+Synthesize provided findings into a concise merge-risk report.
+Answer: "What could go wrong if this PR is merged?"
 
 Rules:
-- Answer: "What could go wrong if this PR is merged?"
-- Use ONLY evidence from the provided findings and PR context.
-- Do NOT invent file names, line numbers, behaviors, or vulnerabilities.
-- riskScore is 0-100 where 0-24 LOW, 25-49 MEDIUM, 50-74 HIGH, 75-100 CRITICAL.
-- Do NOT mechanically average scores. A single CRITICAL security issue can make overall risk CRITICAL.
-- bugRisk, securityRisk, testingRisk are category scores 0-100 based on specialist findings.
-- recommendations must be actionable and tied to the findings.
-- If a category had no specialist run or no findings, score that category low unless context suggests otherwise.`;
+- Use ONLY provided findings/context. Do NOT invent issues.
+- summary: max 2 sentences.
+- recommendations: max 4 short actionable items.
+- riskScore 0-100 (0-24 LOW, 25-49 MEDIUM, 50-74 HIGH, 75-100 CRITICAL).
+- A single CRITICAL finding can justify CRITICAL overall risk.
+- Score unavailable categories low unless findings suggest otherwise.`;
 
 function mergeFindings(state: PRRiskState): RiskFinding[] {
   return [
@@ -47,40 +48,71 @@ function sortFindings(findings: RiskFinding[]): RiskFinding[] {
   );
 }
 
+function buildFallbackReport(state: PRRiskState, allFindings: RiskFinding[]): PRRiskReport {
+  const hasCritical = allFindings.some((finding) => finding.severity === "CRITICAL");
+  const hasHigh = allFindings.some((finding) => finding.severity === "HIGH");
+
+  return {
+    overallRisk: hasCritical ? "CRITICAL" : hasHigh ? "HIGH" : allFindings.length > 0 ? "MEDIUM" : "LOW",
+    riskScore: hasCritical ? 85 : hasHigh ? 65 : allFindings.length > 0 ? 40 : 12,
+    summary:
+      allFindings.length > 0
+        ? "Specialist findings indicate merge risks that should be reviewed before merging."
+        : "No significant merge risks were identified from available analysis.",
+    bugRisk: state.bugFindings.length > 0 ? 55 : 8,
+    securityRisk: state.securityFindings.length > 0 ? 60 : 8,
+    testingRisk: state.testingFindings.length > 0 ? 50 : 8,
+    findings: sortFindings(allFindings),
+    recommendations: allFindings.slice(0, 4).map((finding) => finding.recommendation),
+    warnings: [
+      ...state.agentWarnings,
+      "Final AI synthesis unavailable; showing fallback assessment from specialist findings.",
+    ],
+  };
+}
+
 export async function riskJudgeNode(state: PRRiskState): Promise<Partial<PRRiskState>> {
   const allFindings = mergeFindings(state);
 
-  const userPrompt = [
-    "PR context:",
-    state.compactContext,
-    "",
-    "Change areas:",
-    state.changeAreas.join(", ") || "none",
-    "",
-    "Classification:",
-    JSON.stringify(state.classification ?? {}, null, 2),
-    "",
-    "Bug findings:",
-    JSON.stringify(state.bugFindings, null, 2),
-    "",
-    "Security findings:",
-    JSON.stringify(state.securityFindings, null, 2),
-    "",
-    "Testing findings:",
-    JSON.stringify(state.testingFindings, null, 2),
-  ].join("\n");
+  if (allFindings.length === 0 && state.agentWarnings.length > 0) {
+    startTimer("risk judge");
+    endTimer("risk judge (fallback)");
+    return { finalReport: buildFallbackReport(state, allFindings) };
+  }
 
-  const judge = await invokeStructured(riskJudgeOutputSchema, SYSTEM_PROMPT, userPrompt);
+  startTimer("risk judge");
+  const userPrompt = buildJudgeContext({
+    title: state.title,
+    changeAreas: state.changeAreas,
+    bugFindings: state.bugFindings,
+    securityFindings: state.securityFindings,
+    testingFindings: state.testingFindings,
+    agentWarnings: state.agentWarnings,
+  });
+
+  const judge = await invokeStructuredSafe(
+    riskJudgeOutputSchema,
+    SYSTEM_PROMPT,
+    userPrompt,
+    "judge",
+  );
+
+  endTimer("risk judge");
+
+  if (judge.data === null) {
+    return { finalReport: buildFallbackReport(state, allFindings) };
+  }
 
   const finalReport: PRRiskReport = {
-    overallRisk: judge.overallRisk,
-    riskScore: judge.riskScore,
-    summary: judge.summary,
-    bugRisk: judge.bugRisk,
-    securityRisk: judge.securityRisk,
-    testingRisk: judge.testingRisk,
+    overallRisk: judge.data.overallRisk,
+    riskScore: judge.data.riskScore,
+    summary: judge.data.summary,
+    bugRisk: judge.data.bugRisk,
+    securityRisk: judge.data.securityRisk,
+    testingRisk: judge.data.testingRisk,
     findings: sortFindings(allFindings),
-    recommendations: judge.recommendations,
+    recommendations: judge.data.recommendations,
+    warnings: state.agentWarnings,
   };
 
   return { finalReport };

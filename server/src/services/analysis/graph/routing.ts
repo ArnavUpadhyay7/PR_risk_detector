@@ -1,37 +1,34 @@
+import { Send } from "@langchain/langgraph";
 import type { PRRiskState } from "./state.js";
+import { isTrivialState } from "./nodes/deterministic-classifier.node.js";
+import { useCombinedAnalysisMode } from "./state.js";
 
-export function routeAfterClassifier(state: PRRiskState): "bugRisk" | "securityGate" {
-  return state.classification?.bugRelevant ? "bugRisk" : "securityGate";
-}
-
-export function routeAfterBug(_state: PRRiskState): "securityGate" {
-  return "securityGate";
-}
-
-export function routeAfterSecurityGate(
+export function routeAfterClassifier(
   state: PRRiskState,
-): "securityRisk" | "testingGate" {
-  return state.classification?.securityRelevant ? "securityRisk" : "testingGate";
-}
+): "trivialReport" | "combinedRisk" | Send[] {
+  if (isTrivialState(state)) {
+    return "trivialReport";
+  }
 
-export function routeAfterSecurity(_state: PRRiskState): "testingGate" {
-  return "testingGate";
-}
+  const classification = state.classification;
+  if (!classification) {
+    return "trivialReport";
+  }
 
-export function routeAfterTestingGate(
-  state: PRRiskState,
-): "testingRisk" | "riskJudge" {
-  return state.classification?.testingRelevant ? "testingRisk" : "riskJudge";
-}
+  if (useCombinedAnalysisMode()) {
+    return "combinedRisk";
+  }
 
-export function routeAfterTesting(_state: PRRiskState): "riskJudge" {
-  return "riskJudge";
-}
+  const sends: Send[] = [];
+  if (classification.bugRelevant) {
+    sends.push(new Send("bugRisk", state));
+  }
+  if (classification.securityRelevant) {
+    sends.push(new Send("securityRisk", state));
+  }
+  if (classification.testingRelevant) {
+    sends.push(new Send("testingRisk", state));
+  }
 
-export async function securityGateNode(state: PRRiskState): Promise<Partial<PRRiskState>> {
-  return state;
-}
-
-export async function testingGateNode(state: PRRiskState): Promise<Partial<PRRiskState>> {
-  return state;
+  return sends.length > 0 ? sends : "trivialReport";
 }

@@ -1,38 +1,47 @@
 import type { PRRiskState } from "../state.js";
-import { invokeStructured } from "../../../ai/llm.service.js";
+import { invokeStructuredSafe } from "../../../ai/llm.service.js";
 import { findingsOutputSchema } from "../schemas.js";
+import { buildTestingAgentContext } from "../utils/context-builders.js";
+import { endTimer, startTimer } from "../utils/timing.js";
 
-const SYSTEM_PROMPT = `You are a merge-risk analyst focused on testing and regression risk.
+const SYSTEM_PROMPT = `You analyze pull requests for testing/regression merge risks only.
 
-Compare changed implementation files vs changed test files.
-Look for:
-- important behavior changes without corresponding tests
-- missing edge-case coverage
-- auth/API/logic changes without adequate tests
-- critical logic without regression tests
-
-Use deterministic signals (test files changed: yes/no) as evidence.
-Do NOT invent test files or coverage that is not evidenced in the PR.
-If no meaningful testing risks exist, return an empty findings array.
-Each finding must include severity, title, description, optional file/line if clearly identifiable, and a recommendation.`;
+Return concise structured JSON (max 3 findings).
+Compare implementation changes vs test changes.
+Flag behavior changes without adequate tests.
+Do NOT invent test files.
+Keep descriptions to one short sentence.`;
 
 export async function testingRiskNode(
   state: PRRiskState,
 ): Promise<Partial<PRRiskState>> {
-  const userPrompt = [
-    state.compactContext,
-    "",
-    "Test files changed (deterministic):",
-    String(state.deterministicSummary.testsChanged),
-    "",
-    "Change areas:",
-    state.changeAreas.join(", ") || "unknown",
-    "",
-    "Diff:",
-    state.diff,
-  ].join("\n");
+  startTimer("testing analysis");
 
-  const result = await invokeStructured(findingsOutputSchema, SYSTEM_PROMPT, userPrompt);
+  const userPrompt = buildTestingAgentContext({
+    title: state.title,
+    files: state.filesChanged,
+    testsChanged: state.deterministicSummary.testsChanged,
+  });
 
-  return { testingFindings: result.findings };
+  const result = await invokeStructuredSafe(
+    findingsOutputSchema,
+    SYSTEM_PROMPT,
+    userPrompt,
+    "specialist",
+  );
+
+  endTimer("testing analysis");
+
+  if (result.data === null) {
+    return {
+      testingFindings: [],
+      agentsDone: 1,
+      agentWarnings: [result.error ?? "Testing risk analysis unavailable."],
+    };
+  }
+
+  return {
+    testingFindings: result.data.findings,
+    agentsDone: 1,
+  };
 }

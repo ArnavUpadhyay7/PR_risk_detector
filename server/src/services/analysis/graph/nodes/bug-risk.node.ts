@@ -1,33 +1,44 @@
 import type { PRRiskState } from "../state.js";
-import { invokeStructured } from "../../../ai/llm.service.js";
+import { invokeStructuredSafe } from "../../../ai/llm.service.js";
 import { findingsOutputSchema } from "../schemas.js";
+import { buildBugAgentContext } from "../utils/context-builders.js";
+import { endTimer, startTimer } from "../utils/timing.js";
 
-const SYSTEM_PROMPT = `You are a merge-risk analyst focused on functional and logic bugs.
+const SYSTEM_PROMPT = `You analyze pull requests for functional/logic merge risks only.
 
-Analyze the pull request for merge risks such as:
-- incorrect conditions or branching
-- edge cases and null/undefined handling
-- broken flows or state handling
-- behavior changes that could break existing functionality
-- suspicious logic changes
-
-Do NOT review coding style or formatting.
-Do NOT invent issues. Only report risks supported by the diff/context.
-If no meaningful bug risks exist, return an empty findings array.
-Each finding must include severity, title, description, optional file/line if clearly identifiable, and a recommendation.`;
+Return concise structured JSON (max 3 findings).
+Focus on incorrect conditions, edge cases, broken flows, and behavior regressions.
+Do NOT review style. Do NOT invent issues.
+Keep descriptions to one short sentence.`;
 
 export async function bugRiskNode(state: PRRiskState): Promise<Partial<PRRiskState>> {
-  const userPrompt = [
-    state.compactContext,
-    "",
-    "Change areas:",
-    state.changeAreas.join(", ") || "unknown",
-    "",
-    "Diff:",
-    state.diff,
-  ].join("\n");
+  startTimer("bug analysis");
 
-  const result = await invokeStructured(findingsOutputSchema, SYSTEM_PROMPT, userPrompt);
+  const userPrompt = buildBugAgentContext({
+    title: state.title,
+    description: state.description,
+    files: state.filesChanged,
+  });
 
-  return { bugFindings: result.findings };
+  const result = await invokeStructuredSafe(
+    findingsOutputSchema,
+    SYSTEM_PROMPT,
+    userPrompt,
+    "specialist",
+  );
+
+  endTimer("bug analysis");
+
+  if (result.data === null) {
+    return {
+      bugFindings: [],
+      agentsDone: 1,
+      agentWarnings: [result.error ?? "Bug risk analysis unavailable."],
+    };
+  }
+
+  return {
+    bugFindings: result.data.findings,
+    agentsDone: 1,
+  };
 }
