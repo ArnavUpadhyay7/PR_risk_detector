@@ -24,7 +24,7 @@ export function AppLayout() {
             <NavLink to="/dashboard" className="text-sm font-semibold tracking-tight text-white">
               PR Risk Detector
             </NavLink>
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="flex items-center gap-1 overflow-x-auto">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}

@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, abbreviateSha, formatDate, type AnalysisListItem } from "../services/api";
 import { EmptyState } from "../components/ui/EmptyState";
 import { SkeletonRow } from "../components/ui/StatCard";
 import { RiskBadge } from "../components/ui/RiskBadge";
 
 export function AnalysesPage() {
+  const [searchParams] = useSearchParams();
   const [items, setItems] = useState<AnalysisListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [riskLevel, setRiskLevel] = useState("");
-  const [repository, setRepository] = useState("");
+  const [repository, setRepository] = useState(searchParams.get("repository") ?? "");
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
