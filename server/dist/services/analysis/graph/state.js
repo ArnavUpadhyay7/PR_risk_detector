@@ -11,18 +11,35 @@ export const PRRiskStateAnnotation = Annotation.Root({
     filesChanged: (Annotation),
     diff: (Annotation),
     compactContext: (Annotation),
+    fileDiffs: (Annotation),
     deterministicSummary: (Annotation),
     changeAreas: (Annotation),
     classification: (Annotation),
-    bugFindings: Annotation({
+    agentsPending: Annotation({
         reducer: (_current, update) => update,
+        default: () => 0,
+    }),
+    agentsDone: Annotation({
+        reducer: (current, update) => current + update,
+        default: () => 0,
+    }),
+    agentWarnings: Annotation({
+        reducer: (current, update) => [...current, ...update],
         default: () => [],
     }),
     securityFindings: Annotation({
         reducer: (_current, update) => update,
         default: () => [],
     }),
-    testingFindings: Annotation({
+    qualityFindings: Annotation({
+        reducer: (_current, update) => update,
+        default: () => [],
+    }),
+    performanceFindings: Annotation({
+        reducer: (_current, update) => update,
+        default: () => [],
+    }),
+    bugFindings: Annotation({
         reducer: (_current, update) => update,
         default: () => [],
     }),

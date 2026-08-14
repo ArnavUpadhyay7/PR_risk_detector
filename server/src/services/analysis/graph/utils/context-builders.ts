@@ -165,12 +165,21 @@ export function toFileDiffResponse(fileDiffs: ParsedFileDiff[]) {
     status: fileDiff.status,
     additions: fileDiff.additions,
     deletions: fileDiff.deletions,
-    lines: fileDiff.lines.map((line) => ({
-      type: line.type,
-      content: line.content,
-      oldLine: line.oldLine,
-      newLine: line.newLine,
-      diffPosition: line.diffPosition,
-    })),
+    lines: fileDiff.lines.map((line) => {
+      const mapped: {
+        type: typeof line.type;
+        content: string;
+        diffPosition: number;
+        oldLine?: number;
+        newLine?: number;
+      } = {
+        type: line.type,
+        content: line.content,
+        diffPosition: line.diffPosition,
+      };
+      if (line.oldLine !== undefined) mapped.oldLine = line.oldLine;
+      if (line.newLine !== undefined) mapped.newLine = line.newLine;
+      return mapped;
+    }),
   }));
 }

@@ -32,9 +32,10 @@ function buildInitialState(input: AnalyzePrInput): PRRiskState {
     agentsPending: 0,
     agentsDone: 0,
     agentWarnings: [],
-    bugFindings: [],
     securityFindings: [],
-    testingFindings: [],
+    qualityFindings: [],
+    performanceFindings: [],
+    bugFindings: [],
     finalReport: undefined,
   };
 }

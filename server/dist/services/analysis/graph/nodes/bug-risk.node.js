@@ -1,29 +1,20 @@
-import { invokeStructured } from "../../../ai/llm.service.js";
-import { findingsOutputSchema } from "../schemas.js";
-const SYSTEM_PROMPT = `You are a merge-risk analyst focused on functional and logic bugs.
-
-Analyze the pull request for merge risks such as:
-- incorrect conditions or branching
-- edge cases and null/undefined handling
-- broken flows or state handling
-- behavior changes that could break existing functionality
-- suspicious logic changes
-
-Do NOT review coding style or formatting.
-Do NOT invent issues. Only report risks supported by the diff/context.
-If no meaningful bug risks exist, return an empty findings array.
-Each finding must include severity, title, description, optional file/line if clearly identifiable, and a recommendation.`;
+import { runSpecialistAgent } from "./specialist-agent.js";
+import { buildBugAgentContext } from "../utils/context-builders.js";
+const SYSTEM_PROMPT = `You are the Logic/Bug Agent for merge-risk analysis.
+Focus on functional correctness: incorrect conditions, edge cases, null/undefined handling, broken flows, state inconsistencies, API behavior regressions, and incorrect assumptions visible in the diff.`;
 export async function bugRiskNode(state) {
-    const userPrompt = [
-        state.compactContext,
-        "",
-        "Change areas:",
-        state.changeAreas.join(", ") || "unknown",
-        "",
-        "Diff:",
-        state.diff,
-    ].join("\n");
-    const result = await invokeStructured(findingsOutputSchema, SYSTEM_PROMPT, userPrompt);
-    return { bugFindings: result.findings };
+    return runSpecialistAgent(state, {
+        category: "BUG",
+        timerLabel: "bug agent",
+        findingsKey: "bugFindings",
+        warningLabel: "Logic/bug analysis",
+        systemPrompt: SYSTEM_PROMPT,
+        buildContext: (current) => buildBugAgentContext({
+            title: current.title,
+            description: current.description,
+            files: current.filesChanged,
+            fileDiffs: current.fileDiffs,
+        }),
+    });
 }
 //# sourceMappingURL=bug-risk.node.js.map

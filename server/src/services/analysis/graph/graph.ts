@@ -21,7 +21,7 @@ function buildGraph() {
     .addNode("qualityRisk", qualityRiskNode)
     .addNode("performanceRisk", performanceRiskNode)
     .addNode("bugRisk", bugRiskNode)
-    .addNode("checkJoin", checkJoinNode)
+    .addNode("checkJoin", checkJoinNode, { ends: ["riskAggregator"] })
     .addNode("riskAggregator", riskAggregatorNode)
     .addNode("trivialReport", trivialReportNode)
     .addEdge(START, "prAnalyzer")

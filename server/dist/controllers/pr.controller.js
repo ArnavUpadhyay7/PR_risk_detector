@@ -16,7 +16,10 @@ export async function analyzePr(req, res, next) {
         catch {
             throw new AppError("Invalid GitHub Pull Request URL. Expected format: https://github.com/owner/repository/pull/123", 400);
         }
+        const githubStarted = performance.now();
         const pullRequest = await githubService.getPullRequest(parsed);
+        console.log(`[PR] GitHub fetch: ${Math.round(performance.now() - githubStarted)}ms`);
+        const analysisStarted = performance.now();
         const analysis = await analysisService.analyzePR({
             prUrl: prUrl.trim(),
             pullRequest,
@@ -24,6 +27,7 @@ export async function analyzePr(req, res, next) {
             pullNumber: parsed.pullNumber,
             owner: parsed.owner,
         });
+        console.log(`[PR] analysis total: ${Math.round(performance.now() - analysisStarted)}ms`);
         const response = {
             pullRequest: {
                 title: pullRequest.title,

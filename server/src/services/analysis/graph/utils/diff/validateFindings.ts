@@ -37,7 +37,7 @@ export function validateAndEnrichFinding(
   let line = raw.line ?? undefined;
   let endLine = raw.endLine ?? undefined;
   let evidence = raw.evidence?.trim() || undefined;
-  let diffPosition = raw.diffPosition;
+  let diffPosition: number | undefined;
 
   if (line !== undefined && !lineIsInChangedHunk(fileDiff, line)) {
     line = undefined;

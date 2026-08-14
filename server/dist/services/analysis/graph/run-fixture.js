@@ -1,75 +1,87 @@
 import { setMockLlmHandler } from "../../ai/llm.service.js";
 import { runRiskAnalysisWorkflow } from "./graph.js";
 import { buildFixtureInitialState } from "./fixtures/sample-pr.fixture.js";
-import { changeClassificationSchema, findingsOutputSchema, riskJudgeOutputSchema, } from "./schemas.js";
+import { findingsOutputSchema, aggregatorOutputSchema } from "./schemas.js";
+import { parseAllPatches } from "./utils/diff/parsePatch.js";
+import { validateFindings } from "./utils/diff/validateFindings.js";
+import { dedupeFindings } from "./utils/diff/dedupeFindings.js";
 function createMockHandler() {
     return (systemPrompt, _userPrompt) => {
-        if (systemPrompt.includes("classify pull request")) {
-            return changeClassificationSchema.parse({
-                areas: ["authentication", "backend", "API", "security"],
-                bugRelevant: true,
-                securityRelevant: true,
-                testingRelevant: true,
-                performanceRelevant: false,
-            });
-        }
-        if (systemPrompt.includes("functional and logic bugs")) {
+        if (systemPrompt.includes("Security Agent")) {
             return findingsOutputSchema.parse({
                 findings: [
                     {
-                        severity: "MEDIUM",
-                        title: "Missing null check on decoded JWT payload",
-                        description: "authMiddleware assigns req.user from jwt.verify without validating required claims exist before downstream route handlers read them.",
-                        file: "src/middleware/auth.ts",
-                        recommendation: "Validate decoded token shape and required claims before attaching req.user.",
-                    },
-                ],
-            });
-        }
-        if (systemPrompt.includes("security risks")) {
-            return findingsOutputSchema.parse({
-                findings: [
-                    {
-                        severity: "HIGH",
-                        title: "Authorization change without corresponding tests",
-                        description: "Admin route now checks req.user.isAdmin, but no test changes were included to verify forbidden access for non-admin users.",
-                        file: "src/routes/admin.ts",
-                        recommendation: "Add authorization tests covering admin-only access and forbidden responses.",
-                    },
-                    {
+                        category: "SECURITY",
                         severity: "CRITICAL",
-                        title: "JWT secret reliance without rotation strategy",
-                        description: "Login and middleware rely on process.env.JWT_SECRET with no mention of key rotation or invalidation for expired tokens.",
-                        file: "src/routes/login.ts",
-                        recommendation: "Document secret management and add tests for expired or missing tokens.",
+                        title: "Hardcoded JWT secret",
+                        description: "JWT verification uses a hardcoded secret in auth middleware.",
+                        file: "src/middleware/auth.ts",
+                        line: 3,
+                        evidence: "const secret = 'my-secret';",
+                        recommendation: "Move the secret to an environment variable.",
+                        confidence: 0.94,
                     },
                 ],
             });
         }
-        if (systemPrompt.includes("testing and regression")) {
+        if (systemPrompt.includes("Code Quality Agent")) {
             return findingsOutputSchema.parse({
                 findings: [
                     {
-                        severity: "HIGH",
-                        title: "Authentication behavior changed with no test updates",
-                        description: "Session-based login was replaced with JWT issuance, but no test files were modified in this PR.",
-                        recommendation: "Add tests for login token issuance, missing token responses, and invalid token handling.",
+                        category: "QUALITY",
+                        severity: "MEDIUM",
+                        title: "Duplicated token parsing logic",
+                        description: "Token decoding logic is spread across middleware and utility modules.",
+                        file: "src/utils/token.ts",
+                        line: 8,
+                        evidence: "return JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());",
+                        recommendation: "Centralize token parsing in one validated utility.",
+                        confidence: 0.78,
                     },
                 ],
             });
         }
-        if (systemPrompt.includes("final merge-risk judge")) {
-            return riskJudgeOutputSchema.parse({
-                overallRisk: "HIGH",
-                riskScore: 72,
-                summary: "This PR introduces JWT authentication and admin authorization checks without test coverage. Missing token validation edge cases and absent auth tests create meaningful merge risk.",
-                bugRisk: 45,
-                securityRisk: 82,
-                testingRisk: 78,
+        if (systemPrompt.includes("Performance Agent")) {
+            return findingsOutputSchema.parse({
+                findings: [
+                    {
+                        category: "PERFORMANCE",
+                        severity: "HIGH",
+                        title: "Database query inside loop",
+                        description: "User lookup executes one query per id inside a loop.",
+                        file: "src/services/userService.ts",
+                        line: 34,
+                        evidence: "const user = await db.users.findUnique({ where: { id } });",
+                        recommendation: "Fetch users in a single query using an IN filter.",
+                        confidence: 0.91,
+                    },
+                ],
+            });
+        }
+        if (systemPrompt.includes("Logic/Bug Agent")) {
+            return findingsOutputSchema.parse({
+                findings: [
+                    {
+                        category: "BUG",
+                        severity: "MEDIUM",
+                        title: "Missing JWT claim validation",
+                        description: "Decoded token payload is attached to req.user without validating required claims.",
+                        file: "src/middleware/auth.ts",
+                        line: 10,
+                        evidence: "req.user = jwt.verify(token, secret);",
+                        recommendation: "Validate required claims before attaching req.user.",
+                        confidence: 0.86,
+                    },
+                ],
+            });
+        }
+        if (systemPrompt.includes("final merge-risk aggregator")) {
+            return aggregatorOutputSchema.parse({
+                summary: "JWT auth introduces a hardcoded secret and missing claim validation, with an N+1 query regression in user loading.",
                 recommendations: [
-                    "Add tests for expired, missing, and malformed JWT tokens.",
-                    "Add authorization tests for admin-only routes.",
-                    "Validate decoded JWT claims before use in route handlers.",
+                    "Move JWT secret to environment configuration.",
+                    "Validate decoded token claims before use.",
+                    "Replace per-id user queries with a single batched query.",
                 ],
             });
         }
@@ -82,17 +94,45 @@ async function main() {
     const result = await runRiskAnalysisWorkflow(initialState);
     const report = result.finalReport;
     if (!report) {
-        console.error("FAIL: workflow did not produce finalReport");
-        process.exit(1);
+        throw new Error("Workflow did not produce finalReport");
     }
+    const fileDiffs = parseAllPatches(initialState.filesChanged);
+    const securityValidated = validateFindings([
+        {
+            severity: "CRITICAL",
+            title: "Hardcoded JWT secret",
+            description: "Hardcoded secret in middleware.",
+            file: "src/middleware/auth.ts",
+            line: 3,
+            evidence: "const secret = 'my-secret';",
+            recommendation: "Use env var.",
+            confidence: 0.9,
+        },
+    ], "SECURITY", fileDiffs);
+    const deduped = dedupeFindings([
+        ...securityValidated,
+        {
+            id: "temp",
+            category: "BUG",
+            severity: "MEDIUM",
+            title: "Missing JWT claim validation",
+            description: "Token claims not validated.",
+            recommendation: "Validate claims.",
+            file: "src/middleware/auth.ts",
+            line: 11,
+            evidence: "req.user = jwt.verify(token, secret);",
+            confidence: 0.8,
+        },
+    ]);
     const checks = [
         ["classification set", Boolean(result.classification?.securityRelevant)],
-        ["bug findings", result.bugFindings.length > 0],
-        ["security findings", result.securityFindings.length > 0],
-        ["testing findings", result.testingFindings.length > 0],
-        ["overall risk", report.overallRisk === "HIGH"],
+        ["parallel specialists populated", report.findings.length >= 4],
+        ["security finding mapped", report.findings.some((f) => f.category === "SECURITY" && f.file.includes("auth.ts"))],
+        ["performance finding mapped", report.findings.some((f) => f.category === "PERFORMANCE")],
+        ["file diffs included", report.fileDiffs.length > 0],
+        ["dedupe keeps distinct findings", deduped.length >= 2],
+        ["validation keeps line", securityValidated[0]?.line === 3],
         ["recommendations", report.recommendations.length > 0],
-        ["merged findings", report.findings.length >= 3],
     ];
     let failed = false;
     for (const [label, ok] of checks) {
@@ -100,8 +140,8 @@ async function main() {
         if (!ok)
             failed = true;
     }
-    console.log("\nFinal report summary:", report.summary);
-    console.log("Risk score:", report.riskScore, report.overallRisk);
+    console.log("\nFinal report:", report.overallRisk, report.riskScore);
+    console.log("Findings:", report.findings.length);
     if (failed) {
         process.exit(1);
     }

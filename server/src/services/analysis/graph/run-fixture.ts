@@ -115,7 +115,7 @@ async function main() {
         title: "Hardcoded JWT secret",
         description: "Hardcoded secret in middleware.",
         file: "src/middleware/auth.ts",
-        line: 4,
+        line: 3,
         evidence: "const secret = 'my-secret';",
         recommendation: "Use env var.",
         confidence: 0.9,

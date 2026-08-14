@@ -1,33 +1,21 @@
-import { invokeStructured } from "../../../ai/llm.service.js";
-import { findingsOutputSchema } from "../schemas.js";
-const SYSTEM_PROMPT = `You are a merge-risk analyst focused on security risks.
-
-Analyze the pull request for merge risks such as:
-- authentication or authorization changes
-- unsafe user input handling
-- secrets or credentials exposure
-- insecure API behavior
-- injection risks
-- permission or token/session handling issues
-- sensitive data exposure
-
-Do NOT invent vulnerabilities. Only report risks supported by the diff/context.
-If no meaningful security risks exist, return an empty findings array.
-Each finding must include severity, title, description, optional file/line if clearly identifiable, and a recommendation.`;
+import { runSpecialistAgent } from "./specialist-agent.js";
+import { buildSecurityAgentContext } from "../utils/context-builders.js";
+const SYSTEM_PROMPT = `You are the Security Agent for merge-risk analysis.
+Focus on authentication, authorization, secrets, tokens, sessions, input validation, injection, permissions, sensitive data exposure, and insecure configuration visible in the diff.`;
 export async function securityRiskNode(state) {
-    const userPrompt = [
-        state.compactContext,
-        "",
-        "Security-sensitive filenames detected:",
-        String(state.deterministicSummary.securitySensitive),
-        "",
-        "Change areas:",
-        state.changeAreas.join(", ") || "unknown",
-        "",
-        "Diff:",
-        state.diff,
-    ].join("\n");
-    const result = await invokeStructured(findingsOutputSchema, SYSTEM_PROMPT, userPrompt);
-    return { securityFindings: result.findings };
+    return runSpecialistAgent(state, {
+        category: "SECURITY",
+        timerLabel: "security agent",
+        findingsKey: "securityFindings",
+        warningLabel: "Security analysis",
+        systemPrompt: SYSTEM_PROMPT,
+        buildContext: (current) => buildSecurityAgentContext({
+            title: current.title,
+            description: current.description,
+            files: current.filesChanged,
+            fileDiffs: current.fileDiffs,
+            securitySensitive: current.deterministicSummary.securitySensitive,
+        }),
+    });
 }
 //# sourceMappingURL=security-risk.node.js.map
