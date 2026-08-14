@@ -1,5 +1,15 @@
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type FindingCategory = "SECURITY" | "QUALITY" | "PERFORMANCE" | "BUG";
+
+export interface User {
+  id: string;
+  githubId: string;
+  username: string;
+  avatarUrl: string;
+  email?: string;
+}
 
 export interface RiskFinding {
   id: string;
@@ -71,15 +81,86 @@ export interface PrAnalysisResponse {
     summary: AnalysisSummary;
     riskReport: PRRiskReport;
   };
+  analysisId?: string | null;
 }
 
-export interface ApiErrorResponse {
-  error: string;
+export interface AnalysisListItem {
+  id: string;
+  repository: string;
+  prNumber: number;
+  prTitle: string;
+  prUrl: string;
+  commitSha: string;
+  riskScore: number;
+  riskLevel: string;
+  findingsCount: number;
+  createdAt: string;
+}
+
+export interface AnalysisRecord extends AnalysisListItem {
+  userId: string;
+  repository: { owner: string; name: string; fullName: string };
+  pr: {
+    number: number;
+    title: string;
+    url: string;
+    author: string;
+    baseBranch: string;
+    headBranch: string;
+    additions: number;
+    deletions: number;
+    filesChanged: number;
+  };
+  summary: string;
+  securityRisk: number;
+  qualityRisk: number;
+  performanceRisk: number;
+  bugRisk: number;
+  findings: RiskFinding[];
+  recommendations: string[];
+  warnings: string[];
+  analysisSummary: AnalysisSummary;
+  riskReport: PRRiskReport;
+}
+
+export interface DashboardStats {
+  totalAnalyses: number;
+  highRisk: number;
+  mediumRisk: number;
+  lowRisk: number;
+  averageRiskScore: number;
+  riskDistribution: { high: number; medium: number; low: number; critical: number };
+  recentAnalyses: AnalysisListItem[];
+}
+
+export interface PrHistoryItem {
+  id: string;
+  commitSha: string;
+  riskScore: number;
+  riskLevel: string;
+  findingsCount: number;
+  createdAt: string;
+}
+
+export interface CompareResult {
+  previous: AnalysisRecord;
+  current: AnalysisRecord;
+  diff: {
+    riskScore: { previous: number; current: number; delta: number };
+    securityRisk: { previous: number; current: number; delta: number };
+    qualityRisk: { previous: number; current: number; delta: number };
+    performanceRisk: { previous: number; current: number; delta: number };
+    bugRisk: { previous: number; current: number; delta: number };
+    findingsCount: { previous: number; current: number; delta: number };
+  };
+  improvements: string[];
+  remainingRisks: string[];
+  resolvedFindings: RiskFinding[];
+  newFindings: RiskFinding[];
 }
 
 export class ApiRequestError extends Error {
   readonly statusCode: number | null;
-
   constructor(message: string, statusCode: number | null = null) {
     super(message);
     this.name = "ApiRequestError";
@@ -87,51 +168,67 @@ export class ApiRequestError extends Error {
   }
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "";
-
-export async function analyzePullRequest(prUrl: string): Promise<PrAnalysisResponse> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
-
   try {
-    response = await fetch(`${API_BASE}/api/pr/analyze`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prUrl }),
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
     });
   } catch {
+    throw new ApiRequestError("Unable to reach the server.", null);
+  }
+
+  const data = (await response.json()) as T & { error?: string };
+  if (!response.ok) {
     throw new ApiRequestError(
-      "Unable to reach the server. Make sure the backend is running.",
-      null,
+      data.error ?? "Request failed.",
+      response.status,
     );
   }
-
-  const data = (await response.json()) as PrAnalysisResponse | ApiErrorResponse;
-
-  if (!response.ok) {
-    const message =
-      "error" in data && typeof data.error === "string"
-        ? data.error
-        : response.status === 502 || response.status === 504
-          ? "Analysis couldn't be completed because the AI provider timed out. Please try again."
-          : "Something went wrong while analyzing the pull request.";
-    throw new ApiRequestError(message, response.status);
-  }
-
-  return data as PrAnalysisResponse;
+  return data;
 }
 
-export function parsePrDisplayInfo(prUrl: string): {
-  repository: string;
-  pullNumber: string;
-  title?: string;
-} {
-  const match = prUrl.trim().match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/i);
-  if (!match) {
-    return { repository: "GitHub PR", pullNumber: "" };
-  }
+export const api = {
+  getMe: () => request<{ user: User | null }>("/api/auth/me"),
+  logout: () => request<{ success: boolean }>("/api/auth/logout", { method: "POST" }),
+  getDashboardStats: () => request<DashboardStats>("/api/dashboard/stats"),
+  listAnalyses: (params: Record<string, string>) => {
+    const query = new URLSearchParams(params).toString();
+    return request<{ items: AnalysisListItem[]; total: number; page: number; totalPages: number }>(
+      `/api/analyses?${query}`,
+    );
+  },
+  getRepositories: () => request<{ repositories: string[] }>("/api/analyses/repositories"),
+  getAnalysis: (id: string) => request<AnalysisRecord>(`/api/analyses/${id}`),
+  getAnalysisHistory: (id: string) => request<{ history: PrHistoryItem[] }>(`/api/analyses/${id}/history`),
+  compareAnalyses: (id1: string, id2: string) =>
+    request<CompareResult>(`/api/analyses/compare/${id1}/${id2}`),
+  analyzePullRequest: (prUrl: string) =>
+    request<PrAnalysisResponse>("/api/pr/analyze", {
+      method: "POST",
+      body: JSON.stringify({ prUrl }),
+    }),
+};
 
-  return {
-    repository: match[1] ?? "GitHub PR",
-    pullNumber: match[2] ?? "",
-  };
+export function getGitHubLoginUrl(): string {
+  return `${API_BASE}/api/auth/github`;
+}
+
+export function abbreviateSha(sha: string): string {
+  return sha.slice(0, 7);
+}
+
+export function formatDate(value: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
