@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { PrAnalysisResponse, RiskFinding, RiskLevel } from "../services/api";
+import { DiffViewer } from "./DiffViewer";
 
 interface BadgeProps {
   label: string;
@@ -39,13 +41,28 @@ const severityStyles: Record<RiskLevel, string> = {
   CRITICAL: "border-red-800 bg-red-950 text-red-300",
 };
 
+const categoryStyles: Record<RiskFinding["category"], string> = {
+  SECURITY: "text-red-300",
+  QUALITY: "text-sky-300",
+  PERFORMANCE: "text-violet-300",
+  BUG: "text-orange-300",
+};
+
 export function AnalysisResults({ data }: AnalysisResultsProps) {
   const { pullRequest, analysis } = data;
   const { summary, riskReport } = analysis;
-  const topFindings = riskReport.findings.slice(0, 6);
+  const [selectedFinding, setSelectedFinding] = useState<RiskFinding | null>(null);
+  const [expandedFile, setExpandedFile] = useState<string | null>(
+    riskReport.fileDiffs[0]?.filename ?? null,
+  );
+
+  function handleFindingClick(finding: RiskFinding) {
+    setSelectedFinding(finding);
+    setExpandedFile(finding.file);
+  }
 
   return (
-    <div className="mt-10 w-full max-w-3xl mx-auto space-y-6">
+    <div className="mt-10 w-full max-w-4xl mx-auto space-y-6">
       {riskReport.warnings.length > 0 && (
         <section className="rounded-xl border border-amber-900/50 bg-amber-950/20 px-4 py-3 text-sm text-amber-200">
           <p className="font-medium mb-1">Partial analysis</p>
@@ -58,7 +75,7 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
       )}
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-2">
           Pull Request
         </h2>
         <h3 className="text-lg font-medium text-white mb-4">{pullRequest.title}</h3>
@@ -82,7 +99,7 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
             <dd className="text-zinc-200">
               <span className="text-emerald-400">+{pullRequest.additions}</span>
               {" / "}
-              <span className="text-red-400">−{pullRequest.deletions}</span>
+              <span className="text-red-400">-{pullRequest.deletions}</span>
               {" · "}
               {pullRequest.filesChanged} files
             </dd>
@@ -90,17 +107,13 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
         </dl>
       </section>
 
-      <section
-        className={`rounded-xl border p-6 ${riskStyles[riskReport.overallRisk]}`}
-      >
+      <section className={`rounded-xl border p-6 ${riskStyles[riskReport.overallRisk]}`}>
         <h2 className="text-xs font-medium uppercase tracking-wider opacity-70 mb-4">
           Overall Risk
         </h2>
         <div className="flex items-baseline gap-4">
           <p className="text-3xl font-semibold tracking-tight">{riskReport.overallRisk}</p>
-          <p className="text-lg tabular-nums opacity-90">
-            {riskReport.riskScore} / 100
-          </p>
+          <p className="text-lg tabular-nums opacity-90">{riskReport.riskScore} / 100</p>
         </div>
         <p className="mt-4 text-sm leading-relaxed opacity-90">{riskReport.summary}</p>
       </section>
@@ -109,12 +122,31 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
         <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
           Risk Breakdown
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <RiskMeter label="Bug Risk" value={riskReport.bugRisk} />
-          <RiskMeter label="Security Risk" value={riskReport.securityRisk} />
-          <RiskMeter label="Testing Risk" value={riskReport.testingRisk} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <RiskMeter label="Security" value={riskReport.securityRisk} />
+          <RiskMeter label="Bug" value={riskReport.bugRisk} />
+          <RiskMeter label="Quality" value={riskReport.qualityRisk} />
+          <RiskMeter label="Performance" value={riskReport.performanceRisk} />
         </div>
       </section>
+
+      {riskReport.findings.length > 0 && (
+        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
+            Why is this risky?
+          </h2>
+          <div className="space-y-4">
+            {riskReport.findings.map((finding) => (
+              <FindingCard
+                key={finding.id}
+                finding={finding}
+                selected={selectedFinding?.id === finding.id}
+                onClick={() => handleFindingClick(finding)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
         <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
@@ -141,19 +173,6 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
         </div>
       </section>
 
-      {topFindings.length > 0 && (
-        <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
-          <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
-            Why is this risky?
-          </h2>
-          <div className="space-y-4">
-            {topFindings.map((finding) => (
-              <FindingCard key={`${finding.title}-${finding.file ?? "general"}`} finding={finding} />
-            ))}
-          </div>
-        </section>
-      )}
-
       {riskReport.recommendations.length > 0 && (
         <section className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6">
           <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-4">
@@ -168,6 +187,13 @@ export function AnalysisResults({ data }: AnalysisResultsProps) {
           </ol>
         </section>
       )}
+
+      <DiffViewer
+        fileDiffs={riskReport.fileDiffs}
+        selectedFinding={selectedFinding}
+        expandedFile={expandedFile}
+        onFileSelect={setExpandedFile}
+      />
     </div>
   );
 }
@@ -196,31 +222,56 @@ function RiskMeter({ label, value }: RiskMeterProps) {
 
 interface FindingCardProps {
   finding: RiskFinding;
+  selected: boolean;
+  onClick: () => void;
 }
 
-function FindingCard({ finding }: FindingCardProps) {
+function FindingCard({ finding, selected, onClick }: FindingCardProps) {
   return (
-    <article className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-4">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-lg border p-4 text-left transition-colors ${
+        selected
+          ? "border-zinc-500 bg-zinc-800/80"
+          : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <span
           className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${severityStyles[finding.severity]}`}
         >
           {finding.severity}
         </span>
-        <h3 className="text-sm font-medium text-white">{finding.title}</h3>
+        <span className={`text-xs font-medium uppercase ${categoryStyles[finding.category]}`}>
+          {finding.category}
+        </span>
       </div>
-      <p className="text-sm text-zinc-400 leading-relaxed">{finding.description}</p>
-      {(finding.file || finding.line) && (
-        <p className="mt-2 text-xs font-mono text-zinc-500">
-          {finding.file}
-          {finding.line ? `:${finding.line}` : ""}
-        </p>
+
+      <h3 className="text-sm font-medium text-white mb-2">{finding.title}</h3>
+
+      <p className="text-xs font-mono text-zinc-400 mb-2">
+        {finding.file}
+        {finding.line ? `:${finding.line}` : ""}
+      </p>
+
+      {finding.evidence && (
+        <pre className="mb-2 overflow-x-auto rounded bg-zinc-900 px-3 py-2 text-xs text-zinc-300">
+          {finding.evidence}
+        </pre>
       )}
+
+      <p className="text-sm text-zinc-400 leading-relaxed">{finding.description}</p>
+
       <p className="mt-3 text-sm text-zinc-300">
         <span className="text-zinc-500">Recommendation: </span>
         {finding.recommendation}
       </p>
-    </article>
+
+      <p className="mt-2 text-xs text-zinc-500">
+        Confidence: {Math.round(finding.confidence * 100)}%
+      </p>
+    </button>
   );
 }
 

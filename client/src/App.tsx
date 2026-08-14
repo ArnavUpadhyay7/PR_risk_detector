@@ -8,8 +8,8 @@ import { analyzePullRequest, ApiRequestError, parsePrDisplayInfo } from "./servi
 import type { PrAnalysisResponse } from "./services/api";
 import "./App.css";
 
-const STAGE_INTERVAL_MS = 4500;
-const MAX_STAGE_INDEX = 5;
+const STAGE_INTERVAL_MS = 4000;
+const MAX_STAGE_INDEX = 6;
 
 function App() {
   const [prUrl, setPrUrl] = useState("");

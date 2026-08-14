@@ -3,7 +3,8 @@ export const ANALYSIS_STAGES = [
   { id: "changes", label: "Understanding code changes" },
   { id: "bug", label: "Checking bug risks" },
   { id: "security", label: "Checking security risks" },
-  { id: "testing", label: "Checking test coverage" },
+  { id: "quality", label: "Checking code quality" },
+  { id: "performance", label: "Checking performance risks" },
   { id: "final", label: "Preparing final assessment" },
 ] as const;
 

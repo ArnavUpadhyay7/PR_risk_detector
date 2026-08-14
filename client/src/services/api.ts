@@ -135,10 +135,3 @@ export function parsePrDisplayInfo(prUrl: string): {
     pullNumber: match[2] ?? "",
   };
 }
-
-export function formatLocation(finding: RiskFinding): string {
-  if (finding.line) {
-    return `${finding.file}:${finding.line}`;
-  }
-  return finding.file;
-}
