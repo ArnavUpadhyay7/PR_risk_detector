@@ -1,11 +1,8 @@
 import { Send } from "@langchain/langgraph";
 import type { PRRiskState } from "./state.js";
 import { isTrivialState } from "./nodes/deterministic-classifier.node.js";
-import { useCombinedAnalysisMode } from "./state.js";
 
-export function routeAfterClassifier(
-  state: PRRiskState,
-): "trivialReport" | "combinedRisk" | Send[] {
+export function routeAfterClassifier(state: PRRiskState): "trivialReport" | Send[] {
   if (isTrivialState(state)) {
     return "trivialReport";
   }
@@ -15,19 +12,18 @@ export function routeAfterClassifier(
     return "trivialReport";
   }
 
-  if (useCombinedAnalysisMode()) {
-    return "combinedRisk";
-  }
-
   const sends: Send[] = [];
-  if (classification.bugRelevant) {
-    sends.push(new Send("bugRisk", state));
-  }
   if (classification.securityRelevant) {
     sends.push(new Send("securityRisk", state));
   }
-  if (classification.testingRelevant) {
-    sends.push(new Send("testingRisk", state));
+  if (classification.qualityRelevant) {
+    sends.push(new Send("qualityRisk", state));
+  }
+  if (classification.performanceRelevant) {
+    sends.push(new Send("performanceRisk", state));
+  }
+  if (classification.bugRelevant) {
+    sends.push(new Send("bugRisk", state));
   }
 
   return sends.length > 0 ? sends : "trivialReport";

@@ -12,8 +12,10 @@ const AUTH_KEYWORD_PATTERN =
   /\b(auth|authentication|authorization|jwt|token|session|password|credential|oauth|permission|rbac)\b/i;
 
 const API_FILE_PATTERN = /(?:^|\/)(?:routes|api|controllers|handlers|middleware)(?:\/|\.)/i;
-const DB_FILE_PATTERN = /(?:^|\/)(?:migrations|models|schema|database|db)(?:\/|\.)/i;
+const DB_FILE_PATTERN = /(?:^|\/)(?:migrations|models|schema|database|db|queries|repository|repositories)(?:\/|\.)/i;
 const CONFIG_FILE_PATTERN = /(?:^|\/)(?:config|\.env|package\.json|docker|kubernetes|helm)(?:\/|\.|$)/i;
+const PERF_KEYWORD_PATTERN =
+  /\b(forEach|map\(|reduce\(|await\s+.+\(|query\(|findAll|findMany|loop|cache|render|sync)\b/i;
 
 const CODE_EXTENSIONS = new Set([
   "ts", "tsx", "js", "jsx", "py", "go", "rs", "java", "kt", "rb", "php", "cs", "swift", "vue", "svelte",
@@ -58,6 +60,7 @@ export function classifyChanges(
   let hasApiSignal = false;
   let hasDbSignal = false;
   let hasConfigSignal = false;
+  let hasPerfSignal = false;
   let hasImplementationChanges = false;
 
   for (const file of files) {
@@ -88,6 +91,7 @@ export function classifyChanges(
     if (DB_FILE_PATTERN.test(file.filename)) {
       areas.add("database");
       hasDbSignal = true;
+      hasPerfSignal = true;
     }
 
     if (CONFIG_FILE_PATTERN.test(file.filename)) {
@@ -102,6 +106,11 @@ export function classifyChanges(
     if (patchContainsKeyword(file.patch, AUTH_KEYWORD_PATTERN)) {
       areas.add("authentication");
       hasAuthSignal = true;
+    }
+
+    if (patchContainsKeyword(file.patch, PERF_KEYWORD_PATTERN)) {
+      hasPerfSignal = true;
+      areas.add("performance");
     }
 
     const ext = getExtension(file.filename);
@@ -127,9 +136,9 @@ export function classifyChanges(
   const bugRelevant = hasImplementationChanges && !docsOnly;
   const securityRelevant =
     summary.securitySensitive || hasAuthSignal || hasApiSignal || hasConfigSignal;
-  const testingRelevant =
-    hasImplementationChanges && (!summary.testsChanged || hasAuthSignal || hasApiSignal);
-  const performanceRelevant = hasDbSignal || areas.has("backend");
+  const qualityRelevant = hasImplementationChanges && !docsOnly;
+  const performanceRelevant =
+    hasPerfSignal || hasDbSignal || (hasImplementationChanges && areas.has("backend"));
 
   if (docsOnly) {
     areas.add("UI");
@@ -139,16 +148,17 @@ export function classifyChanges(
     areas: [...areas].sort(),
     bugRelevant,
     securityRelevant,
-    testingRelevant,
+    qualityRelevant,
     performanceRelevant,
   };
 }
 
 export function countRelevantAgents(classification: ChangeClassification): number {
   let count = 0;
-  if (classification.bugRelevant) count += 1;
   if (classification.securityRelevant) count += 1;
-  if (classification.testingRelevant) count += 1;
+  if (classification.qualityRelevant) count += 1;
+  if (classification.performanceRelevant) count += 1;
+  if (classification.bugRelevant) count += 1;
   return count;
 }
 
@@ -156,6 +166,7 @@ export function isTrivialChange(classification: ChangeClassification): boolean {
   return (
     !classification.bugRelevant &&
     !classification.securityRelevant &&
-    !classification.testingRelevant
+    !classification.qualityRelevant &&
+    !classification.performanceRelevant
   );
 }

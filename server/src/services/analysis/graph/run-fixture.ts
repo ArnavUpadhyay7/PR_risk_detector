@@ -1,99 +1,93 @@
 import { setMockLlmHandler } from "../../ai/llm.service.js";
 import { runRiskAnalysisWorkflow } from "./graph.js";
 import { buildFixtureInitialState } from "./fixtures/sample-pr.fixture.js";
-import {
-  combinedFindingsOutputSchema,
-  findingsOutputSchema,
-  riskJudgeOutputSchema,
-} from "./schemas.js";
+import { findingsOutputSchema, aggregatorOutputSchema } from "./schemas.js";
+import { parseAllPatches } from "./utils/diff/parsePatch.js";
+import { validateFindings } from "./utils/diff/validateFindings.js";
+import { dedupeFindings } from "./utils/diff/dedupeFindings.js";
 
 function createMockHandler() {
   return (systemPrompt: string, _userPrompt: string): unknown => {
-    if (systemPrompt.includes("bug, security, and testing")) {
-      return combinedFindingsOutputSchema.parse({
-        bugFindings: [
+    if (systemPrompt.includes("Security Agent")) {
+      return findingsOutputSchema.parse({
+        findings: [
           {
+            category: "SECURITY",
+            severity: "CRITICAL",
+            title: "Hardcoded JWT secret",
+            description: "JWT verification uses a hardcoded secret in auth middleware.",
+            file: "src/middleware/auth.ts",
+            line: 3,
+            evidence: "const secret = 'my-secret';",
+            recommendation: "Move the secret to an environment variable.",
+            confidence: 0.94,
+          },
+        ],
+      });
+    }
+
+    if (systemPrompt.includes("Code Quality Agent")) {
+      return findingsOutputSchema.parse({
+        findings: [
+          {
+            category: "QUALITY",
+            severity: "MEDIUM",
+            title: "Duplicated token parsing logic",
+            description: "Token decoding logic is spread across middleware and utility modules.",
+            file: "src/utils/token.ts",
+            line: 8,
+            evidence: "return JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());",
+            recommendation: "Centralize token parsing in one validated utility.",
+            confidence: 0.78,
+          },
+        ],
+      });
+    }
+
+    if (systemPrompt.includes("Performance Agent")) {
+      return findingsOutputSchema.parse({
+        findings: [
+          {
+            category: "PERFORMANCE",
+            severity: "HIGH",
+            title: "Database query inside loop",
+            description: "User lookup executes one query per id inside a loop.",
+            file: "src/services/userService.ts",
+            line: 34,
+            evidence: "const user = await db.users.findUnique({ where: { id } });",
+            recommendation: "Fetch users in a single query using an IN filter.",
+            confidence: 0.91,
+          },
+        ],
+      });
+    }
+
+    if (systemPrompt.includes("Logic/Bug Agent")) {
+      return findingsOutputSchema.parse({
+        findings: [
+          {
+            category: "BUG",
             severity: "MEDIUM",
             title: "Missing JWT claim validation",
-            description: "Decoded token claims are not validated before use in route handlers.",
+            description: "Decoded token payload is attached to req.user without validating required claims.",
             file: "src/middleware/auth.ts",
+            line: 10,
+            evidence: "req.user = jwt.verify(token, secret);",
             recommendation: "Validate required claims before attaching req.user.",
-          },
-        ],
-        securityFindings: [
-          {
-            severity: "CRITICAL",
-            title: "Admin route authorization added without tests",
-            description: "Non-admin access paths are not covered by new authorization checks.",
-            file: "src/routes/admin.ts",
-            recommendation: "Add authorization tests for admin-only routes.",
-          },
-        ],
-        testingFindings: [
-          {
-            severity: "HIGH",
-            title: "Auth flow changed without test updates",
-            description: "JWT login replaces session auth but no test files changed.",
-            recommendation: "Add tests for token issuance and invalid token handling.",
+            confidence: 0.86,
           },
         ],
       });
     }
 
-    if (systemPrompt.includes("functional/logic merge risks only")) {
-      return findingsOutputSchema.parse({
-        findings: [
-          {
-            severity: "MEDIUM",
-            title: "Missing null check on decoded JWT payload",
-            description: "authMiddleware assigns req.user without validating required claims.",
-            file: "src/middleware/auth.ts",
-            recommendation: "Validate decoded token shape before attaching req.user.",
-          },
-        ],
-      });
-    }
-
-    if (systemPrompt.includes("security merge risks only")) {
-      return findingsOutputSchema.parse({
-        findings: [
-          {
-            severity: "CRITICAL",
-            title: "JWT secret reliance without rotation strategy",
-            description: "Login and middleware rely on JWT_SECRET without invalidation coverage.",
-            file: "src/routes/login.ts",
-            recommendation: "Add tests for expired or missing tokens.",
-          },
-        ],
-      });
-    }
-
-    if (systemPrompt.includes("testing/regression merge risks only")) {
-      return findingsOutputSchema.parse({
-        findings: [
-          {
-            severity: "HIGH",
-            title: "Authentication behavior changed with no test updates",
-            description: "Session login replaced with JWT issuance without test file changes.",
-            recommendation: "Add login and middleware auth tests.",
-          },
-        ],
-      });
-    }
-
-    if (systemPrompt.includes("final merge-risk judge")) {
-      return riskJudgeOutputSchema.parse({
-        overallRisk: "HIGH",
-        riskScore: 72,
+    if (systemPrompt.includes("final merge-risk aggregator")) {
+      return aggregatorOutputSchema.parse({
         summary:
-          "JWT auth and admin authorization changes ship without adequate tests or token edge-case coverage.",
-        bugRisk: 45,
-        securityRisk: 82,
-        testingRisk: 78,
+          "JWT auth introduces a hardcoded secret and missing claim validation, with an N+1 query regression in user loading.",
         recommendations: [
-          "Add tests for expired, missing, and malformed JWT tokens.",
-          "Add authorization tests for admin-only routes.",
-          "Validate decoded JWT claims before use in route handlers.",
+          "Move JWT secret to environment configuration.",
+          "Validate decoded token claims before use.",
+          "Replace per-id user queries with a single batched query.",
         ],
       });
     }
@@ -102,8 +96,7 @@ function createMockHandler() {
   };
 }
 
-async function runFixture(mode: "combined" | "parallel") {
-  process.env.RISK_ANALYSIS_MODE = mode;
+async function main() {
   setMockLlmHandler(createMockHandler());
 
   const initialState = buildFixtureInitialState();
@@ -114,27 +107,65 @@ async function runFixture(mode: "combined" | "parallel") {
     throw new Error("Workflow did not produce finalReport");
   }
 
-  console.log(`\n[Fixture:${mode}]`, report.overallRisk, report.riskScore);
-  console.log("Findings:", report.findings.length, "Warnings:", report.warnings.length);
+  const fileDiffs = parseAllPatches(initialState.filesChanged);
+  const securityValidated = validateFindings(
+    [
+      {
+        severity: "CRITICAL",
+        title: "Hardcoded JWT secret",
+        description: "Hardcoded secret in middleware.",
+        file: "src/middleware/auth.ts",
+        line: 4,
+        evidence: "const secret = 'my-secret';",
+        recommendation: "Use env var.",
+        confidence: 0.9,
+      },
+    ],
+    "SECURITY",
+    fileDiffs,
+  );
 
-  return {
-    ok:
-      Boolean(result.classification?.securityRelevant) &&
-      report.findings.length >= 2 &&
-      report.recommendations.length > 0,
-  };
-}
+  const deduped = dedupeFindings([
+    ...securityValidated,
+    {
+      id: "temp",
+      category: "BUG",
+      severity: "MEDIUM",
+      title: "Missing JWT claim validation",
+      description: "Token claims not validated.",
+      recommendation: "Validate claims.",
+      file: "src/middleware/auth.ts",
+      line: 11,
+      evidence: "req.user = jwt.verify(token, secret);",
+      confidence: 0.8,
+    },
+  ]);
 
-async function main() {
-  const combined = await runFixture("combined");
-  const parallel = await runFixture("parallel");
+  const checks = [
+    ["classification set", Boolean(result.classification?.securityRelevant)],
+    ["parallel specialists populated", report.findings.length >= 4],
+    ["security finding mapped", report.findings.some((f) => f.category === "SECURITY" && f.file.includes("auth.ts"))],
+    ["performance finding mapped", report.findings.some((f) => f.category === "PERFORMANCE")],
+    ["file diffs included", report.fileDiffs.length > 0],
+    ["dedupe keeps distinct findings", deduped.length >= 2],
+    ["validation keeps line", securityValidated[0]?.line === 3],
+    ["recommendations", report.recommendations.length > 0],
+  ] as const;
 
-  if (!combined.ok || !parallel.ok) {
-    console.error("Graph fixture test failed.");
+  let failed = false;
+  for (const [label, ok] of checks) {
+    console.log(`${ok ? "✓" : "✗"} ${label}`);
+    if (!ok) failed = true;
+  }
+
+  console.log("\nFinal report:", report.overallRisk, report.riskScore);
+  console.log("Findings:", report.findings.length);
+
+  if (failed) {
     process.exit(1);
   }
 
-  console.log("\nGraph fixture test passed (combined + parallel).");
+  console.log("\nGraph fixture test passed.");
 }
 
 main().catch((error) => {

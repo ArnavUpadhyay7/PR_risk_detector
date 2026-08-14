@@ -1,12 +1,12 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
-import { PRRiskStateAnnotation, type PRRiskState, useCombinedAnalysisMode } from "./state.js";
+import { PRRiskStateAnnotation, type PRRiskState } from "./state.js";
 import { prAnalyzerNode } from "./nodes/pr-analyzer.node.js";
 import { deterministicClassifierNode } from "./nodes/deterministic-classifier.node.js";
-import { bugRiskNode } from "./nodes/bug-risk.node.js";
 import { securityRiskNode } from "./nodes/security-risk.node.js";
-import { testingRiskNode } from "./nodes/testing-risk.node.js";
-import { combinedRiskNode } from "./nodes/combined-risk.node.js";
-import { riskJudgeNode } from "./nodes/risk-judge.node.js";
+import { qualityRiskNode } from "./nodes/quality-risk.node.js";
+import { performanceRiskNode } from "./nodes/performance-risk.node.js";
+import { bugRiskNode } from "./nodes/bug-risk.node.js";
+import { riskAggregatorNode } from "./nodes/risk-aggregator.node.js";
 import { trivialReportNode } from "./nodes/trivial-report.node.js";
 import { checkJoinNode } from "./nodes/check-join.node.js";
 import { routeAfterClassifier } from "./routing.js";
@@ -17,28 +17,28 @@ function buildGraph() {
   const graph = new StateGraph(PRRiskStateAnnotation)
     .addNode("prAnalyzer", prAnalyzerNode)
     .addNode("classifier", deterministicClassifierNode)
-    .addNode("bugRisk", bugRiskNode)
     .addNode("securityRisk", securityRiskNode)
-    .addNode("testingRisk", testingRiskNode)
-    .addNode("combinedRisk", combinedRiskNode)
+    .addNode("qualityRisk", qualityRiskNode)
+    .addNode("performanceRisk", performanceRiskNode)
+    .addNode("bugRisk", bugRiskNode)
     .addNode("checkJoin", checkJoinNode)
-    .addNode("riskJudge", riskJudgeNode)
+    .addNode("riskAggregator", riskAggregatorNode)
     .addNode("trivialReport", trivialReportNode)
     .addEdge(START, "prAnalyzer")
     .addEdge("prAnalyzer", "classifier")
     .addConditionalEdges("classifier", routeAfterClassifier, [
       "trivialReport",
-      "combinedRisk",
-      "bugRisk",
       "securityRisk",
-      "testingRisk",
+      "qualityRisk",
+      "performanceRisk",
+      "bugRisk",
     ])
-    .addEdge("combinedRisk", "riskJudge")
-    .addEdge("bugRisk", "checkJoin")
     .addEdge("securityRisk", "checkJoin")
-    .addEdge("testingRisk", "checkJoin")
+    .addEdge("qualityRisk", "checkJoin")
+    .addEdge("performanceRisk", "checkJoin")
+    .addEdge("bugRisk", "checkJoin")
     .addEdge("trivialReport", END)
-    .addEdge("riskJudge", END);
+    .addEdge("riskAggregator", END);
 
   return graph.compile();
 }
@@ -55,9 +55,8 @@ function getGraph() {
 export async function runRiskAnalysisWorkflow(
   initialState: PRRiskState,
 ): Promise<PRRiskState> {
-  const mode = useCombinedAnalysisMode() ? "combined" : "parallel";
   startTimer("total workflow");
-  console.log(`[Graph] mode: ${mode}`);
+  console.log("[Graph] mode: parallel multi-agent");
 
   try {
     const result = await getGraph().invoke(initialState);

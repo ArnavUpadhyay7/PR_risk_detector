@@ -25,6 +25,7 @@ function buildInitialState(input: AnalyzePrInput): PRRiskState {
     filesChanged: input.pullRequest.files,
     diff: "",
     compactContext: "",
+    fileDiffs: [],
     deterministicSummary,
     changeAreas: [],
     classification: undefined,

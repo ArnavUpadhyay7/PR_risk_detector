@@ -6,6 +6,7 @@ import type {
   PRRiskReport,
   RiskFinding,
 } from "./schemas.js";
+import type { ParsedFileDiff } from "./utils/diff/parsePatch.js";
 
 export const PRRiskStateAnnotation = Annotation.Root({
   prUrl: Annotation<string>,
@@ -19,6 +20,7 @@ export const PRRiskStateAnnotation = Annotation.Root({
   filesChanged: Annotation<GitHubPullRequestFile[]>,
   diff: Annotation<string>,
   compactContext: Annotation<string>,
+  fileDiffs: Annotation<ParsedFileDiff[]>,
   deterministicSummary: Annotation<AnalysisSummary>,
   changeAreas: Annotation<string[]>,
   classification: Annotation<ChangeClassification | undefined>,
@@ -34,15 +36,19 @@ export const PRRiskStateAnnotation = Annotation.Root({
     reducer: (current, update) => [...current, ...update],
     default: () => [],
   }),
-  bugFindings: Annotation<RiskFinding[]>({
-    reducer: (_current, update) => update,
-    default: () => [],
-  }),
   securityFindings: Annotation<RiskFinding[]>({
     reducer: (_current, update) => update,
     default: () => [],
   }),
-  testingFindings: Annotation<RiskFinding[]>({
+  qualityFindings: Annotation<RiskFinding[]>({
+    reducer: (_current, update) => update,
+    default: () => [],
+  }),
+  performanceFindings: Annotation<RiskFinding[]>({
+    reducer: (_current, update) => update,
+    default: () => [],
+  }),
+  bugFindings: Annotation<RiskFinding[]>({
     reducer: (_current, update) => update,
     default: () => [],
   }),
@@ -50,7 +56,3 @@ export const PRRiskStateAnnotation = Annotation.Root({
 });
 
 export type PRRiskState = typeof PRRiskStateAnnotation.State;
-
-export function useCombinedAnalysisMode(): boolean {
-  return process.env.RISK_ANALYSIS_MODE !== "parallel";
-}
