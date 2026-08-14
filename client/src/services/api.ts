@@ -97,7 +97,7 @@ export interface AnalysisListItem {
   createdAt: string;
 }
 
-export interface AnalysisRecord extends AnalysisListItem {
+export interface AnalysisRecord extends Omit<AnalysisListItem, "repository"> {
   userId: string;
   repository: { owner: string; name: string; fullName: string };
   pr: {
