@@ -1,24 +1,49 @@
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type FindingCategory = "SECURITY" | "QUALITY" | "PERFORMANCE" | "BUG";
 
 export interface RiskFinding {
+  id: string;
+  category: FindingCategory;
   severity: RiskLevel;
   title: string;
   description: string;
-  file?: string;
-  line?: number;
   recommendation: string;
+  file: string;
+  line?: number;
+  endLine?: number;
+  evidence?: string;
+  diffPosition?: number;
+  confidence: number;
+}
+
+export interface ParsedDiffLine {
+  type: "add" | "remove" | "context";
+  content: string;
+  oldLine?: number;
+  newLine?: number;
+  diffPosition: number;
+}
+
+export interface FileDiff {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  lines: ParsedDiffLine[];
 }
 
 export interface PRRiskReport {
   overallRisk: RiskLevel;
   riskScore: number;
   summary: string;
-  bugRisk: number;
   securityRisk: number;
-  testingRisk: number;
+  qualityRisk: number;
+  performanceRisk: number;
+  bugRisk: number;
   findings: RiskFinding[];
   recommendations: string[];
   warnings: string[];
+  fileDiffs: FileDiff[];
 }
 
 export interface AnalysisSummary {
@@ -95,7 +120,11 @@ export async function analyzePullRequest(prUrl: string): Promise<PrAnalysisRespo
   return data as PrAnalysisResponse;
 }
 
-export function parsePrDisplayInfo(prUrl: string): { repository: string; pullNumber: string; title?: string } {
+export function parsePrDisplayInfo(prUrl: string): {
+  repository: string;
+  pullNumber: string;
+  title?: string;
+} {
   const match = prUrl.trim().match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/i);
   if (!match) {
     return { repository: "GitHub PR", pullNumber: "" };
@@ -105,4 +134,11 @@ export function parsePrDisplayInfo(prUrl: string): { repository: string; pullNum
     repository: match[1] ?? "GitHub PR",
     pullNumber: match[2] ?? "",
   };
+}
+
+export function formatLocation(finding: RiskFinding): string {
+  if (finding.line) {
+    return `${finding.file}:${finding.line}`;
+  }
+  return finding.file;
 }
