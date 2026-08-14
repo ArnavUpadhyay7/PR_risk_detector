@@ -4,6 +4,7 @@ export const samplePullRequest = {
     author: "dev-user",
     baseBranch: "main",
     headBranch: "feature/jwt-auth",
+    headSha: "abc123def4567890abcdef1234567890abcdef12",
     additions: 186,
     deletions: 24,
     changedFiles: 6,

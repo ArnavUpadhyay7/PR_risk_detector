@@ -9,5 +9,6 @@ const userSchema = new Schema({
         default: {},
     },
 }, { timestamps: true });
-export const UserModel = mongoose.models.User ?? mongoose.model("User", userSchema);
+export const UserModel = mongoose.models.User ??
+    mongoose.model("User", userSchema);
 //# sourceMappingURL=user.model.js.map

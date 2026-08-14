@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
-import { UserModel } from "../models/user.model.js";
-import { AppError } from "../utils/AppError.js";
+import { UserModel } from "../../models/user.model.js";
+import { AppError } from "../../utils/AppError.js";
 const COOKIE_NAME = "prd_token";
 const TOKEN_TTL = "7d";
 function getJwtSecret() {
@@ -98,7 +98,7 @@ export async function findOrCreateUser(githubUser) {
             githubId,
             username: githubUser.login,
             avatarUrl: githubUser.avatar_url,
-            email: githubUser.email ?? undefined,
+            ...(githubUser.email ? { email: githubUser.email } : {}),
         });
     }
     else {
@@ -113,7 +113,7 @@ export async function findOrCreateUser(githubUser) {
         githubId: user.githubId,
         username: user.username,
         avatarUrl: user.avatarUrl,
-        email: user.email ?? undefined,
+        ...(user.email ? { email: user.email } : {}),
     };
 }
 export async function getUserById(userId) {
@@ -125,7 +125,7 @@ export async function getUserById(userId) {
         githubId: user.githubId,
         username: user.username,
         avatarUrl: user.avatarUrl,
-        email: user.email ?? undefined,
+        ...(user.email ? { email: user.email } : {}),
     };
 }
 //# sourceMappingURL=auth.service.js.map

@@ -12,29 +12,45 @@ import { AppError } from "../../utils/AppError.js";
 import type { PRRiskReport } from "./graph/schemas.js";
 import type { AnalysisSummary } from "../../types/analysis.types.js";
 
-function mapFinding(finding: StoredFinding): StoredFinding {
-  return { ...finding };
+function mapFinding(
+  finding: AnalysisDocument["findings"][number],
+): StoredFinding {
+  return {
+    id: finding.id,
+    category: finding.category,
+    severity: finding.severity,
+    title: finding.title,
+    description: finding.description,
+    file: finding.file,
+    ...(finding.line != null ? { line: finding.line } : {}),
+    ...(finding.endLine != null ? { endLine: finding.endLine } : {}),
+    ...(finding.evidence != null ? { evidence: finding.evidence } : {}),
+    recommendation: finding.recommendation,
+    confidence: finding.confidence,
+  };
 }
 
 function toRecordResponse(doc: AnalysisDocument): AnalysisRecordResponse {
+  const repository = doc.repository!;
+  const pr = doc.pr!;
   return {
     id: doc._id.toString(),
     userId: doc.userId.toString(),
     repository: {
-      owner: doc.repository.owner,
-      name: doc.repository.name,
-      fullName: doc.repository.fullName,
+      owner: repository.owner,
+      name: repository.name,
+      fullName: repository.fullName,
     },
     pr: {
-      number: doc.pr.number,
-      title: doc.pr.title,
-      url: doc.pr.url,
-      author: doc.pr.author,
-      baseBranch: doc.pr.baseBranch,
-      headBranch: doc.pr.headBranch,
-      additions: doc.pr.additions,
-      deletions: doc.pr.deletions,
-      filesChanged: doc.pr.filesChanged,
+      number: pr.number,
+      title: pr.title,
+      url: pr.url,
+      author: pr.author,
+      baseBranch: pr.baseBranch,
+      headBranch: pr.headBranch,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      filesChanged: pr.filesChanged,
     },
     commitSha: doc.commitSha,
     riskScore: doc.riskScore,
@@ -54,12 +70,14 @@ function toRecordResponse(doc: AnalysisDocument): AnalysisRecordResponse {
 }
 
 function toListItem(doc: AnalysisDocument): AnalysisListItem {
+  const repository = doc.repository!;
+  const pr = doc.pr!;
   return {
     id: doc._id.toString(),
-    repository: doc.repository.fullName,
-    prNumber: doc.pr.number,
-    prTitle: doc.pr.title,
-    prUrl: doc.pr.url,
+    repository: repository.fullName,
+    prNumber: pr.number,
+    prTitle: pr.title,
+    prUrl: pr.url,
     commitSha: doc.commitSha,
     riskScore: doc.riskScore,
     riskLevel: doc.riskLevel,
@@ -131,7 +149,7 @@ export async function listAnalyses(
 ): Promise<{ items: AnalysisListItem[]; total: number; page: number; totalPages: number }> {
   const page = Math.max(1, query.page ?? 1);
   const limit = Math.min(50, Math.max(1, query.limit ?? 20));
-  const filter: Record<string, unknown> = { userId };
+  const filter = { userId } as Record<string, unknown>;
 
   if (query.riskLevel) {
     filter.riskLevel = query.riskLevel.toUpperCase();
@@ -183,7 +201,7 @@ export async function getPrHistory(
   analysisId: string,
 ): Promise<PrHistoryItem[]> {
   const current = await AnalysisModel.findOne({ _id: analysisId, userId });
-  if (!current) {
+  if (!current?.repository || !current.pr) {
     throw new AppError("Analysis not found.", 404);
   }
 
@@ -222,6 +240,10 @@ export async function compareAnalyses(
   }
 
   if (
+    !doc1.repository ||
+    !doc2.repository ||
+    !doc1.pr ||
+    !doc2.pr ||
     doc1.repository.fullName !== doc2.repository.fullName ||
     doc1.pr.number !== doc2.pr.number
   ) {

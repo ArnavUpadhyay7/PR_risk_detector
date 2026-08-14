@@ -128,7 +128,7 @@ export async function findOrCreateUser(githubUser: GitHubUser): Promise<AuthUser
       githubId,
       username: githubUser.login,
       avatarUrl: githubUser.avatar_url,
-      email: githubUser.email ?? undefined,
+      ...(githubUser.email ? { email: githubUser.email } : {}),
     });
   } else {
     user.username = githubUser.login;
@@ -142,7 +142,7 @@ export async function findOrCreateUser(githubUser: GitHubUser): Promise<AuthUser
     githubId: user.githubId,
     username: user.username,
     avatarUrl: user.avatarUrl,
-    email: user.email ?? undefined,
+    ...(user.email ? { email: user.email } : {}),
   };
 }
 
@@ -155,6 +155,6 @@ export async function getUserById(userId: string): Promise<AuthUser | null> {
     githubId: user.githubId,
     username: user.username,
     avatarUrl: user.avatarUrl,
-    email: user.email ?? undefined,
+    ...(user.email ? { email: user.email } : {}),
   };
 }

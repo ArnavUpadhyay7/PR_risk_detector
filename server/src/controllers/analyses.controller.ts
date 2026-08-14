@@ -6,7 +6,14 @@ import {
   getPrHistory,
   getRepositories,
   listAnalyses,
+  type ListAnalysesQuery,
 } from "../services/analysis/analysis-record.service.js";
+
+function paramValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  return undefined;
+}
 
 export async function getStats(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -15,14 +22,6 @@ export async function getStats(req: Request, res: Response, next: NextFunction):
   } catch (error) {
     next(error);
   }
-}
-
-import type { ListAnalysesQuery } from "../services/analysis/analysis-record.service.js";
-
-function paramValue(value: string | string[] | undefined): string | undefined {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value[0];
-  return undefined;
 }
 
 export async function getAnalyses(req: Request, res: Response, next: NextFunction): Promise<void> {

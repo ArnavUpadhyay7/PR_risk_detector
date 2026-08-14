@@ -46,7 +46,8 @@ const analysisSchema = new Schema({
 }, { timestamps: { createdAt: true, updatedAt: false } });
 analysisSchema.index({ userId: 1, createdAt: -1 });
 analysisSchema.index({ userId: 1, "repository.fullName": 1, "pr.number": 1, createdAt: -1 });
-export const AnalysisModel = mongoose.models.Analysis ?? mongoose.model("Analysis", analysisSchema);
+export const AnalysisModel = mongoose.models.Analysis ??
+    mongoose.model("Analysis", analysisSchema);
 export async function saveAnalysisRecord(input) {
     if (mongoose.connection.readyState !== 1) {
         console.warn("MongoDB not connected — analysis not persisted.");

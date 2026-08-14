@@ -63,7 +63,8 @@ export type AnalysisDocument = InferSchemaType<typeof analysisSchema> & {
 };
 
 export const AnalysisModel =
-  mongoose.models.Analysis ?? mongoose.model("Analysis", analysisSchema);
+  (mongoose.models.Analysis as mongoose.Model<AnalysisDocument> | undefined) ??
+  mongoose.model<AnalysisDocument>("Analysis", analysisSchema);
 
 export interface SaveAnalysisInput {
   userId: string;
