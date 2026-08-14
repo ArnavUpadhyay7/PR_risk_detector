@@ -50,6 +50,7 @@ export async function getPullRequest(parsed) {
         author: prData.user?.login ?? "unknown",
         baseBranch: prData.base.ref,
         headBranch: prData.head.ref,
+        headSha: prData.head.sha,
         additions: prData.additions,
         deletions: prData.deletions,
         changedFiles: prData.changed_files,

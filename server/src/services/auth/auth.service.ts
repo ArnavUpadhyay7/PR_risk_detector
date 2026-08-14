@@ -1,8 +1,8 @@
 import jwt from "jsonwebtoken";
 import type { Response } from "express";
-import { UserModel } from "../models/user.model.js";
-import type { AuthUser, JwtPayload } from "../types/auth.types.js";
-import { AppError } from "../utils/AppError.js";
+import { UserModel } from "../../models/user.model.js";
+import type { AuthUser, JwtPayload } from "../../types/auth.types.js";
+import { AppError } from "../../utils/AppError.js";
 
 const COOKIE_NAME = "prd_token";
 const TOKEN_TTL = "7d";

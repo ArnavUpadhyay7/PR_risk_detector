@@ -5,6 +5,9 @@ import { analysisService } from "../services/analysis/analysis.service.js";
 import { saveAnalysisRecord } from "../models/analysis.model.js";
 export async function analyzePr(req, res, next) {
     try {
+        if (!req.user) {
+            throw new AppError("Authentication required.", 401);
+        }
         const { prUrl } = req.body;
         if (typeof prUrl !== "string" || prUrl.trim().length === 0) {
             throw new AppError("Please provide a GitHub Pull Request URL.", 400);
@@ -41,14 +44,17 @@ export async function analyzePr(req, res, next) {
             },
             analysis,
         };
-        void saveAnalysisRecord({
+        const saved = await saveAnalysisRecord({
+            userId: req.user.id,
             prUrl: prUrl.trim(),
-            repository: `${parsed.owner}/${parsed.repository}`,
             pullNumber: parsed.pullNumber,
-            title: pullRequest.title,
-            result: response,
+            commitSha: pullRequest.headSha,
+            response,
         });
-        res.json(response);
+        res.json({
+            ...response,
+            analysisId: saved?._id.toString() ?? null,
+        });
     }
     catch (error) {
         next(error);

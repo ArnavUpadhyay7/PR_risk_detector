@@ -1,4 +1,4 @@
-import type { AnalysisDocument } from "../models/analysis.model.js";
+import type { AnalysisDocument } from "../../models/analysis.model.js";
 import type {
   AnalysisListItem,
   AnalysisRecordResponse,
@@ -6,10 +6,10 @@ import type {
   DashboardStats,
   PrHistoryItem,
   StoredFinding,
-} from "../types/analysis-record.types.js";
-import { AnalysisModel } from "../models/analysis.model.js";
-import { AppError } from "../utils/AppError.js";
-import type { PRRiskReport } from "../services/analysis/graph/schemas.js";
+} from "../../types/analysis-record.types.js";
+import { AnalysisModel } from "../../models/analysis.model.js";
+import { AppError } from "../../utils/AppError.js";
+import type { PRRiskReport } from "./graph/schemas.js";
 import type { AnalysisSummary } from "../../types/analysis.types.js";
 
 function mapFinding(finding: StoredFinding): StoredFinding {
