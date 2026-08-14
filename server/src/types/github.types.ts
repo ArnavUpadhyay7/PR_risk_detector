@@ -19,6 +19,7 @@ export interface GitHubPullRequest {
   author: string;
   baseBranch: string;
   headBranch: string;
+  headSha: string;
   additions: number;
   deletions: number;
   changedFiles: number;

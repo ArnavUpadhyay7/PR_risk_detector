@@ -6,7 +6,7 @@ interface GitHubApiPullRequest {
   body: string | null;
   user: { login: string } | null;
   base: { ref: string };
-  head: { ref: string };
+  head: { ref: string; sha: string };
   additions: number;
   deletions: number;
   changed_files: number;
@@ -85,6 +85,7 @@ export async function getPullRequest(parsed: ParsedPrUrl): Promise<GitHubPullReq
     author: prData.user?.login ?? "unknown",
     baseBranch: prData.base.ref,
     headBranch: prData.head.ref,
+    headSha: prData.head.sha,
     additions: prData.additions,
     deletions: prData.deletions,
     changedFiles: prData.changed_files,

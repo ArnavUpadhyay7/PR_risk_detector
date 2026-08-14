@@ -12,6 +12,10 @@ export async function analyzePr(
   next: NextFunction,
 ): Promise<void> {
   try {
+    if (!req.user) {
+      throw new AppError("Authentication required.", 401);
+    }
+
     const { prUrl } = req.body as { prUrl?: unknown };
 
     if (typeof prUrl !== "string" || prUrl.trim().length === 0) {
@@ -56,15 +60,18 @@ export async function analyzePr(
       analysis,
     };
 
-    void saveAnalysisRecord({
+    const saved = await saveAnalysisRecord({
+      userId: req.user.id,
       prUrl: prUrl.trim(),
-      repository: `${parsed.owner}/${parsed.repository}`,
       pullNumber: parsed.pullNumber,
-      title: pullRequest.title,
-      result: response,
+      commitSha: pullRequest.headSha,
+      response,
     });
 
-    res.json(response);
+    res.json({
+      ...response,
+      analysisId: saved?._id.toString() ?? null,
+    });
   } catch (error) {
     next(error);
   }
