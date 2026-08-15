@@ -54,6 +54,8 @@ export function AppLayout() {
               <div className="relative group">
                 <button
                   type="button"
+                  aria-haspopup="menu"
+                  aria-label={`Account menu for ${user.username}`}
                   className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-zinc-900 transition-colors"
                 >
                   <img
@@ -63,11 +65,11 @@ export function AppLayout() {
                   />
                   <span className="hidden sm:inline text-sm text-zinc-300">{user.username}</span>
                 </button>
-                <div className="absolute right-0 mt-1 hidden w-40 rounded-lg border border-zinc-800 bg-zinc-900 py-1 shadow-lg group-hover:block">
+                <div className="absolute right-0 top-full hidden w-40 pt-1 group-hover:block group-focus-within:block">
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="w-full px-3 py-2 text-left text-sm text-zinc-300 hover:bg-zinc-800"
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 mt-1 text-left text-sm text-zinc-300 shadow-lg hover:bg-zinc-800"
                   >
                     Logout
                   </button>
