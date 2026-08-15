@@ -1,4 +1,29 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
+const SESSION_STORAGE_KEY = "prd_session";
+
+export function captureSessionFromHash(): void {
+  if (typeof window === "undefined") return;
+
+  const hash = window.location.hash;
+  if (!hash.startsWith("#prd_session=")) return;
+
+  const token = decodeURIComponent(hash.slice("#prd_session=".length));
+  if (token) {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, token);
+  }
+
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+}
+
+export function clearSessionToken(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
+function getSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return sessionStorage.getItem(SESSION_STORAGE_KEY);
+}
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type FindingCategory = "SECURITY" | "QUALITY" | "PERFORMANCE" | "BUG";
@@ -170,12 +195,14 @@ export class ApiRequestError extends Error {
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
+  const sessionToken = getSessionToken();
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...options,
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
         ...(options.headers ?? {}),
       },
     });

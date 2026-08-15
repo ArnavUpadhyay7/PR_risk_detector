@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, type User } from "../services/api";
+import { api, captureSessionFromHash, clearSessionToken, type User } from "../services/api";
 
 interface AuthContextValue {
   user: User | null;
@@ -21,10 +21,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await api.logout();
+    clearSessionToken();
     setUser(null);
   }
 
   useEffect(() => {
+    captureSessionFromHash();
     refresh()
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
