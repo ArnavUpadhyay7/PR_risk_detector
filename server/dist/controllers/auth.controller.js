@@ -19,7 +19,7 @@ export async function handleGitHubCallback(req, res, next) {
         const user = await findOrCreateUser(githubUser);
         const token = signToken({ userId: user.id, githubId: user.githubId });
         setAuthCookie(res, token);
-        const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:5173";
+        const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(/\/+$/, "");
         res.redirect(`${frontendUrl}/dashboard`);
     }
     catch (error) {

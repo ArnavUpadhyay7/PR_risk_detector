@@ -26,6 +26,43 @@ function getJwtSecret(): string {
   return secret;
 }
 
+function getAppUrl(): string {
+  const raw = process.env.APP_URL ?? "http://localhost:5000";
+  return raw.replace(/\/+$/, "");
+}
+
+function getFrontendUrl(): string {
+  const raw = process.env.FRONTEND_URL ?? "http://localhost:5173";
+  return raw.replace(/\/+$/, "");
+}
+
+function isCrossDomainAuth(): boolean {
+  try {
+    const frontend = new URL(getFrontendUrl());
+    const app = new URL(getAppUrl());
+    if (frontend.origin === app.origin) return false;
+    // localhost uses different ports locally but shares cookies on the host.
+    if (frontend.hostname === "localhost" && app.hostname === "localhost") return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getCookieOptions(): { secure: boolean; sameSite: "lax" | "none" } {
+  if (isCrossDomainAuth()) {
+    return { secure: true, sameSite: "none" };
+  }
+  return {
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  };
+}
+
+function getGitHubRedirectUri(): string {
+  return `${getAppUrl()}/api/auth/github/callback`;
+}
+
 function getGitHubConfig() {
   const clientId = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
@@ -48,17 +85,23 @@ export function verifyToken(token: string): JwtPayload {
 }
 
 export function setAuthCookie(res: Response, token: string): void {
+  const cookieOptions = getCookieOptions();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
 }
 
 export function clearAuthCookie(res: Response): void {
-  res.clearCookie(COOKIE_NAME, { path: "/" });
+  const cookieOptions = getCookieOptions();
+  res.clearCookie(COOKIE_NAME, {
+    path: "/",
+    secure: cookieOptions.secure,
+    sameSite: cookieOptions.sameSite,
+  });
 }
 
 export function getAuthCookieName(): string {
@@ -67,7 +110,7 @@ export function getAuthCookieName(): string {
 
 export function getGitHubAuthUrl(state: string): string {
   const { clientId } = getGitHubConfig();
-  const redirectUri = `${process.env.APP_URL ?? "http://localhost:5000"}/api/auth/github/callback`;
+  const redirectUri = getGitHubRedirectUri();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -79,7 +122,7 @@ export function getGitHubAuthUrl(state: string): string {
 
 export async function exchangeGitHubCode(code: string): Promise<GitHubUser> {
   const { clientId, clientSecret } = getGitHubConfig();
-  const redirectUri = `${process.env.APP_URL ?? "http://localhost:5000"}/api/auth/github/callback`;
+  const redirectUri = getGitHubRedirectUri();
 
   const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
