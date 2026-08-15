@@ -14,10 +14,18 @@ function getAllowedOrigin() {
 }
 export function createApp() {
     const app = express();
+    app.set("trust proxy", 1);
     const frontendOrigin = getAllowedOrigin();
     app.use(cors({
-        origin: frontendOrigin,
+        origin(origin, callback) {
+            if (!origin || origin === frontendOrigin) {
+                callback(null, origin ?? frontendOrigin);
+                return;
+            }
+            callback(new Error(`Origin ${origin} is not allowed by CORS`));
+        },
         credentials: true,
+        allowedHeaders: ["Content-Type", "Authorization"],
     }));
     app.use(cookieParser());
     app.use(express.json());

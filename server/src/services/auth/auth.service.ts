@@ -31,12 +31,12 @@ function getAppUrl(): string {
   return raw.replace(/\/+$/, "");
 }
 
-function getFrontendUrl(): string {
+export function getFrontendUrl(): string {
   const raw = process.env.FRONTEND_URL ?? "http://localhost:5173";
   return raw.replace(/\/+$/, "");
 }
 
-function isCrossDomainAuth(): boolean {
+export function isCrossDomainAuth(): boolean {
   try {
     const frontend = new URL(getFrontendUrl());
     const app = new URL(getAppUrl());
@@ -49,13 +49,18 @@ function isCrossDomainAuth(): boolean {
   }
 }
 
-function getCookieOptions(): { secure: boolean; sameSite: "lax" | "none" } {
+function getCookieOptions(): {
+  secure: boolean;
+  sameSite: "lax" | "none";
+  partitioned: boolean;
+} {
   if (isCrossDomainAuth()) {
-    return { secure: true, sameSite: "none" };
+    return { secure: true, sameSite: "none", partitioned: true };
   }
   return {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
+    partitioned: false,
   };
 }
 
@@ -90,6 +95,7 @@ export function setAuthCookie(res: Response, token: string): void {
     httpOnly: true,
     secure: cookieOptions.secure,
     sameSite: cookieOptions.sameSite,
+    partitioned: cookieOptions.partitioned,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
   });
@@ -101,6 +107,7 @@ export function clearAuthCookie(res: Response): void {
     path: "/",
     secure: cookieOptions.secure,
     sameSite: cookieOptions.sameSite,
+    partitioned: cookieOptions.partitioned,
   });
 }
 

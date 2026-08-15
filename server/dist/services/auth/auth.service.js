@@ -14,11 +14,11 @@ function getAppUrl() {
     const raw = process.env.APP_URL ?? "http://localhost:5000";
     return raw.replace(/\/+$/, "");
 }
-function getFrontendUrl() {
+export function getFrontendUrl() {
     const raw = process.env.FRONTEND_URL ?? "http://localhost:5173";
     return raw.replace(/\/+$/, "");
 }
-function isCrossDomainAuth() {
+export function isCrossDomainAuth() {
     try {
         const frontend = new URL(getFrontendUrl());
         const app = new URL(getAppUrl());
@@ -35,11 +35,12 @@ function isCrossDomainAuth() {
 }
 function getCookieOptions() {
     if (isCrossDomainAuth()) {
-        return { secure: true, sameSite: "none" };
+        return { secure: true, sameSite: "none", partitioned: true };
     }
     return {
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
+        partitioned: false,
     };
 }
 function getGitHubRedirectUri() {
@@ -70,6 +71,7 @@ export function setAuthCookie(res, token) {
         httpOnly: true,
         secure: cookieOptions.secure,
         sameSite: cookieOptions.sameSite,
+        partitioned: cookieOptions.partitioned,
         maxAge: 7 * 24 * 60 * 60 * 1000,
         path: "/",
     });
@@ -80,6 +82,7 @@ export function clearAuthCookie(res) {
         path: "/",
         secure: cookieOptions.secure,
         sameSite: cookieOptions.sameSite,
+        partitioned: cookieOptions.partitioned,
     });
 }
 export function getAuthCookieName() {

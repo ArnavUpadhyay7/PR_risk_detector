@@ -4,7 +4,9 @@ import {
   clearAuthCookie,
   exchangeGitHubCode,
   findOrCreateUser,
+  getFrontendUrl,
   getGitHubAuthUrl,
+  isCrossDomainAuth,
   setAuthCookie,
   signToken,
 } from "../services/auth/auth.service.js";
@@ -38,8 +40,11 @@ export async function handleGitHubCallback(
     const token = signToken({ userId: user.id, githubId: user.githubId });
     setAuthCookie(res, token);
 
-    const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(/\/+$/, "");
-    res.redirect(`${frontendUrl}/dashboard`);
+    const frontendUrl = getFrontendUrl();
+    const redirectUrl = isCrossDomainAuth()
+      ? `${frontendUrl}/dashboard#prd_session=${encodeURIComponent(token)}`
+      : `${frontendUrl}/dashboard`;
+    res.redirect(redirectUrl);
   } catch (error) {
     next(error);
   }
